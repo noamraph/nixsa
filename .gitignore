@@ -8,3 +8,7 @@ wheels/
 
 # venv
 .venv
+
+# Others
+/output
+*.tar.xz

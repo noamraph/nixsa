@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+
+"""
+Usage:
+nixsa [--nix=/path/to/nix] [--nix-sh=/path/to/nix.sh] [--no-nix-sh] [-v] [cmd] [arg, [arg, ...]]
+
+If run as a symlink, and the final symlink linking to `nixsa` is a simple name in the same directory,
+use the name of the symlink as CMD.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from shlex import quote
+
+
+def nix_user_chroot(nixpath: Path, command: list[str], is_verbose: bool) -> None:
+    args = ['bwrap', '--bind', str(nixpath), '/nix', '--proc', '/proc', '--dev', '/dev']
+    for root_dir in sorted(Path('/').glob('*')):
+        if root_dir.name not in ('dev', 'proc', 'nix') and root_dir.resolve().exists():
+            args.extend(['--bind', str(root_dir), str(root_dir)])
+    args.extend(command)
+    if is_verbose:
+        print(' '.join(map(quote, args)), file=sys.stderr)
+    os.execvp(args[0], args)
+
+
+def parse_args(argv: list[str]) -> tuple[bool, Path, list[str]]:
+    if len(argv) < 3:
+        print(f'Usage: {argv[0]} [-v] <nixpath> <command>', file=sys.stderr)
+        raise SystemExit(1)
+
+    if argv[1] == '-v':
+        is_verbose = True
+        nixpath = Path(argv[2])
+        command = argv[3:]
+    else:
+        is_verbose = False
+        nixpath = Path(argv[1])
+        command = argv[2:]
+    return is_verbose, nixpath, command
+
+
+def main() -> int:
+    is_verbose, nixpath, command = parse_args(sys.argv)
+    nix_user_chroot(nixpath, command, is_verbose)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -15,7 +15,10 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = []
+dev-dependencies = [
+    "pip>=24.2",
+    "ipykernel>=6.29.5",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

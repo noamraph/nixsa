@@ -10,3 +10,69 @@
 #   universal: false
 
 -e file:.
+asttokens==2.4.1
+    # via stack-data
+comm==0.2.2
+    # via ipykernel
+debugpy==1.8.2
+    # via ipykernel
+decorator==5.1.1
+    # via ipython
+executing==2.0.1
+    # via stack-data
+ipykernel==6.29.5
+ipython==8.26.0
+    # via ipykernel
+jedi==0.19.1
+    # via ipython
+jupyter-client==8.6.2
+    # via ipykernel
+jupyter-core==5.7.2
+    # via ipykernel
+    # via jupyter-client
+matplotlib-inline==0.1.7
+    # via ipykernel
+    # via ipython
+nest-asyncio==1.6.0
+    # via ipykernel
+packaging==24.1
+    # via ipykernel
+parso==0.8.4
+    # via jedi
+pexpect==4.9.0
+    # via ipython
+pip==24.2
+platformdirs==4.2.2
+    # via jupyter-core
+prompt-toolkit==3.0.47
+    # via ipython
+psutil==6.0.0
+    # via ipykernel
+ptyprocess==0.7.0
+    # via pexpect
+pure-eval==0.2.3
+    # via stack-data
+pygments==2.18.0
+    # via ipython
+python-dateutil==2.9.0.post0
+    # via jupyter-client
+pyzmq==26.0.3
+    # via ipykernel
+    # via jupyter-client
+six==1.16.0
+    # via asttokens
+    # via python-dateutil
+stack-data==0.6.3
+    # via ipython
+tornado==6.4.1
+    # via ipykernel
+    # via jupyter-client
+traitlets==5.14.3
+    # via comm
+    # via ipykernel
+    # via ipython
+    # via jupyter-client
+    # via jupyter-core
+    # via matplotlib-inline
+wcwidth==0.2.13
+    # via prompt-toolkit
