@@ -2,9 +2,7 @@
 name = "nixsa"
 version = "0.1.0"
 description = "Add your description here"
-authors = [
-    { name = "Noam Yorav-Raphael", email = "noamraph@gmail.com" }
-]
+authors = [{ name = "Noam Yorav-Raphael", email = "noamraph@gmail.com" }]
 dependencies = []
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -18,6 +16,9 @@ managed = true
 dev-dependencies = [
     "pip>=24.2",
     "ipykernel>=6.29.5",
+    "mypy>=1.4.1",
+    "ruff>=0.4.8",
+    "pylint>=2.17.7",
 ]
 
 [tool.hatch.metadata]
@@ -25,3 +26,24 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nixsa"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+select = ["I"] # Enable isort
+
+[tool.mypy]
+strict = true
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = '''
+    C,
+    R,
+    logging-fstring-interpolation,
+    unspecified-encoding,
+    fixme,
+    '''

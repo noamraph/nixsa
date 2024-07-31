@@ -10,6 +10,8 @@
 #   universal: false
 
 -e file:.
+astroid==3.2.4
+    # via pylint
 asttokens==2.4.1
     # via stack-data
 comm==0.2.2
@@ -18,11 +20,15 @@ debugpy==1.8.2
     # via ipykernel
 decorator==5.1.1
     # via ipython
+dill==0.3.8
+    # via pylint
 executing==2.0.1
     # via stack-data
 ipykernel==6.29.5
 ipython==8.26.0
     # via ipykernel
+isort==5.13.2
+    # via pylint
 jedi==0.19.1
     # via ipython
 jupyter-client==8.6.2
@@ -33,6 +39,11 @@ jupyter-core==5.7.2
 matplotlib-inline==0.1.7
     # via ipykernel
     # via ipython
+mccabe==0.7.0
+    # via pylint
+mypy==1.11.1
+mypy-extensions==1.0.0
+    # via mypy
 nest-asyncio==1.6.0
     # via ipykernel
 packaging==24.1
@@ -44,6 +55,7 @@ pexpect==4.9.0
 pip==24.2
 platformdirs==4.2.2
     # via jupyter-core
+    # via pylint
 prompt-toolkit==3.0.47
     # via ipython
 psutil==6.0.0
@@ -54,16 +66,20 @@ pure-eval==0.2.3
     # via stack-data
 pygments==2.18.0
     # via ipython
+pylint==3.2.6
 python-dateutil==2.9.0.post0
     # via jupyter-client
 pyzmq==26.0.3
     # via ipykernel
     # via jupyter-client
+ruff==0.5.5
 six==1.16.0
     # via asttokens
     # via python-dateutil
 stack-data==0.6.3
     # via ipython
+tomlkit==0.13.0
+    # via pylint
 tornado==6.4.1
     # via ipykernel
     # via jupyter-client
@@ -74,5 +90,7 @@ traitlets==5.14.3
     # via jupyter-client
     # via jupyter-core
     # via matplotlib-inline
+typing-extensions==4.12.2
+    # via mypy
 wcwidth==0.2.13
     # via prompt-toolkit
