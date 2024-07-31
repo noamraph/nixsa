@@ -23,7 +23,7 @@ from subprocess import call
 def nix_user_chroot(nixpath: Path, source_nix_sh: bool, cmdargs: list[str], is_verbose: bool) -> int:
     nixpath = nixpath.absolute()
     args = ['bwrap', '--bind', str(nixpath), '/nix', '--proc', '/proc', '--dev', '/dev']
-    for root_dir in sorted(Path('/').glob('*')):
+    for root_dir in sorted(Path('/').iterdir()):
         if root_dir.name not in ('dev', 'proc', 'nix') and root_dir.resolve().exists():
             args.extend(['--bind', str(root_dir), str(root_dir)])
     if source_nix_sh:

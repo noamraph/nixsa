@@ -7,12 +7,27 @@ import re
 import sys
 from pathlib import Path
 from shlex import quote
-from subprocess import PIPE, Popen, check_call
+from subprocess import run
 
 
-def sh(args: list[str | Path]) -> None:
-    print(' '.join(quote(str(arg)) for arg in args), file=sys.stderr)
-    check_call(args)
+# pylint: disable=redefined-builtin
+def sh(args: list[str | Path], input: bytes | None = None) -> None:
+    print(' '.join(quote(str(arg)) for arg in args) + (' < INPUT' if input else ''), file=sys.stderr)
+    run(args, check=True, input=input)
+
+
+def bwrap(outdir: Path, args: list[str | Path], input: bytes | None = None) -> None:
+    """
+    Use bwrap to run the command with /nix binded to nix_dir.
+    This is what the nixsa executable does, but without extra stuff.
+    """
+    nix_dir = str(outdir / 'nix')
+    args1 = (
+        ['bwrap', '--bind', nix_dir, '/nix', '--proc', '/proc', '--dev', '/dev', '--bind', '/tmp', '/tmp']
+        + ['--bind', str(outdir), str(outdir)]
+        + args
+    )
+    sh(args1, input)
 
 
 def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
@@ -36,7 +51,7 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
     nix_dir.joinpath('var/nix').mkdir()
     install_script = extracted.joinpath('install').read_text()
     (nix_inst,) = re.findall(r'nix="([^"]+)"', install_script)
-    (_cacert,) = re.findall(r'cacert="([^"]+)"', install_script)
+    (cacert,) = re.findall(r'cacert="([^"]+)"', install_script)
     bin_dir = outdir / 'bin'
     bin_dir.mkdir()
     nixsa = bin_dir / 'nixsa'
@@ -44,24 +59,20 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
     nixsa.write_bytes(nixsa_s)
     nixsa.chmod(0o555)
 
+    # Initialize the nix DB
     reginfo = extracted.joinpath('.reginfo').read_bytes()
-    with Popen([nixsa, '--no-nix-sh', f'{nix_inst}/bin/nix-store', '--load-db'], stdin=PIPE) as subp:
-        subp.communicate(reginfo)
+    bwrap(outdir, [f'{nix_inst}/bin/nix-store', '--load-db'], input=reginfo)
 
+    # Create a directory for the profile and set $NIX_PROFILE
     state_dir = outdir / 'state'
     state_dir.mkdir()
     state_dir.joinpath('nix').mkdir()
     os.environ['NIX_PROFILE'] = str(state_dir / 'nix/profile')
-    sh(
-        [
-            bin_dir / 'nixsa',
-            '-v',
-            '--no-nix-sh',
-            f'{nix_inst}/bin/nix-env',
-            '-i',
-            nix_inst,
-        ]
-    )
+
+    # Install the `nix` package
+    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', nix_inst])
+    # Install an SSL certificate bundle.
+    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', cacert])
 
 
 def main() -> None:
