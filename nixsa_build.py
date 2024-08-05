@@ -9,11 +9,16 @@ from pathlib import Path
 from shlex import quote
 from subprocess import run
 
+NIX_CONF = """\
+experimental-features = nix-command flakes
+use-xdg-base-directories = true
+"""
+
 
 # pylint: disable=redefined-builtin
-def sh(args: list[str | Path], input: bytes | None = None) -> None:
+def sh(args: list[str | Path], input: bytes | None = None, env: dict[str, str | Path] | None = None) -> None:
     print(' '.join(quote(str(arg)) for arg in args) + (' < INPUT' if input else ''), file=sys.stderr)
-    run(args, check=True, input=input)
+    run(args, check=True, input=input, env=env)
 
 
 def bwrap(outdir: Path, args: list[str | Path], input: bytes | None = None) -> None:
@@ -27,7 +32,15 @@ def bwrap(outdir: Path, args: list[str | Path], input: bytes | None = None) -> N
         + ['--bind', str(outdir), str(outdir)]
         + args
     )
-    sh(args1, input)
+    extra_env = {
+        'NIX_USER_CONF_FILES': outdir / 'config/nix.conf',
+        'NIX_CACHE_HOME': outdir / 'cache',
+        'NIX_CONFIG_HOME': outdir / 'config',
+        'NIX_DATA_HOME': outdir / 'share',
+        'NIX_STATE_HOME': outdir / 'state',
+    }
+    env = os.environ | extra_env
+    sh(args1, input, env=env)
 
 
 def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
@@ -37,19 +50,24 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
         raise RuntimeError(f'{outdir} must not exist before the call')
     outdir = outdir.absolute()
     outdir.mkdir()
+
     sh(['tar', '-C', outdir, '-xf', nix_archive])
     children = list(outdir.iterdir())
     if len(children) != 1:
         raise RuntimeError('Expecting one main directory in archive')
     (extracted,) = children
     assert extracted.is_dir()
+    outdir.joinpath('nix').mkdir()
+    extracted.joinpath('store').rename(outdir / 'nix/store')
+    install_script = extracted.joinpath('install').read_text()
+    reginfo = extracted.joinpath('.reginfo').read_bytes()
+    for p in extracted.iterdir():
+        p.unlink()
+    extracted.rmdir()
+
     nix_dir = outdir / 'nix'
-    nix_dir.mkdir()
-    store_dir = nix_dir / 'store'
-    extracted.joinpath('store').rename(store_dir)
     nix_dir.joinpath('var').mkdir()
     nix_dir.joinpath('var/nix').mkdir()
-    install_script = extracted.joinpath('install').read_text()
     (nix_inst,) = re.findall(r'nix="([^"]+)"', install_script)
     (cacert,) = re.findall(r'cacert="([^"]+)"', install_script)
     bin_dir = outdir / 'bin'
@@ -59,20 +77,31 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
     nixsa.write_bytes(nixsa_s)
     nixsa.chmod(0o555)
 
-    # Initialize the nix DB
-    reginfo = extracted.joinpath('.reginfo').read_bytes()
-    bwrap(outdir, [f'{nix_inst}/bin/nix-store', '--load-db'], input=reginfo)
-
-    # Create a directory for the profile and set $NIX_PROFILE
+    # Create user directories
     state_dir = outdir / 'state'
     state_dir.mkdir()
-    state_dir.joinpath('nix').mkdir()
-    os.environ['NIX_PROFILE'] = str(state_dir / 'nix/profile')
+    config_dir = outdir / 'config'
+    config_dir.mkdir()
+    config_dir.joinpath('nix.conf').write_text(NIX_CONF)
+    data_dir = outdir / 'share'
+    data_dir.mkdir()
+    cache_dir = outdir / 'cache'
+    cache_dir.mkdir()
+
+    # Initialize the nix DB
+    bwrap(outdir, [f'{nix_inst}/bin/nix-store', '--load-db'], input=reginfo)
 
     # Install the `nix` package
-    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', nix_inst])
+    bwrap(outdir, [f'{nix_inst}/bin/nix', 'profile', 'install', nix_inst])
+
     # Install an SSL certificate bundle.
-    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', cacert])
+    # We now use nixsa, so symlinks will be created.
+    sh([outdir / 'bin/nixsa', '-v', f'{nix_inst}/bin/nix', 'profile', 'install', cacert])
+
+    # Install the nixpkgs channel.
+    # This time we're using a symlink created by the previous step.
+    sh([outdir / 'bin/nix-channel', '--add', 'https://nixos.org/channels/nixos-24.05', 'nixpkgs'])
+    sh([outdir / 'bin/nix-channel', '--update', 'nixpkgs'])
 
 
 def main() -> None:

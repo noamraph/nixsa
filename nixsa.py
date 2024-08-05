@@ -15,8 +15,8 @@ Running `$NIXSA/bin/nix --help` is the same as running `$NIXSA/bin/nixsa nix --h
 If no arguments are given, and not run as a symlink, will run use $SHELL as the command.
 
 After running the command, the entries in the $NIXSA/bin directories will be updated
-with symlinks to `nixsa` according to the entries in $NIXSA/state/nix/profile/bin.
-The mtime of the $NIXSA/bin directory will be set to the mtime of the $NIXSA/state/nix/profile
+with symlinks to `nixsa` according to the entries in $NIXSA/state/profile/bin.
+The mtime of the $NIXSA/bin directory will be set to the mtime of the $NIXSA/state/profile
 symlink. This allows to skip the update if the profile wasn't updated.
 
 options:
@@ -26,19 +26,13 @@ options:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+from logging import info
 from pathlib import Path
 from shlex import quote
 from subprocess import call
-
-
-def _set_env(name: str, value: str | Path | None) -> str:
-    """Get a bash command to set an environment variable"""
-    if value is not None:
-        return f'export {name}={quote(str(value))}'
-    else:
-        return f'unset {name}'
 
 
 def _get_bwrap_prefix(nixpath: Path | str) -> list[str]:
@@ -49,28 +43,74 @@ def _get_bwrap_prefix(nixpath: Path | str) -> list[str]:
     return args
 
 
-def _get_bash_c(basepath: Path, cmd: str) -> str:
-    """Get the bash script to pass to `bash -c`"""
-    # Hack: We set $HOME and $XDG_STATE_HOME (and then restore them) because that's how nix.sh constructs $NIX_LINK.
-    home = os.environ.get('HOME')
-    xdg_state_home = os.environ.get('XDG_STATE_HOME')
-    tmp_home = basepath
-    tmp_xdg_state_home = basepath / 'state'
-    before = f'{_set_env("HOME", tmp_home)} && {_set_env("XDG_STATE_HOME", tmp_xdg_state_home)}'
-    after = f'{_set_env("HOME", home)} && {_set_env("XDG_STATE_HOME", xdg_state_home)}'
-    nix_sh = basepath / 'state/nix/profile/etc/profile.d/nix.sh'
-    return f'{before} && source {quote(str(nix_sh))} && {after} && exec {quote(cmd)} "$@"'
+def get_real_profile_bin_dir(basepath: Path) -> Path:
+    profiles_dir = basepath / 'state/profiles'
+    cur_profile_base = profiles_dir.joinpath('profile').readlink()
+    cur_profile = profiles_dir / cur_profile_base
+    cur_profile_nix = os.readlink(cur_profile)
+    if not cur_profile_nix.startswith('/nix/'):
+        raise RuntimeError(f"Expecting profile link to start with '/nix/', is {cur_profile_nix!r}")
+    cur_profile_real = basepath.joinpath(cur_profile_nix[1:])
+    cur_profile_bin = cur_profile_real / 'bin'
+    if cur_profile_bin.is_symlink():
+        cur_profile_bin_nix = os.readlink(cur_profile_bin)
+        if not cur_profile_bin_nix.startswith('/nix'):
+            raise RuntimeError(f"Expecting profile/bin link to start with '/nix', is {cur_profile_bin_nix!r}")
+        cur_profile_bin_real = basepath.joinpath(cur_profile_bin_nix[1:])
+    else:
+        cur_profile_bin_real = cur_profile_bin
+    if not cur_profile_bin_real.is_dir():
+        raise RuntimeError(f'{cur_profile_bin_real!r} is not a directory')
+    return cur_profile_bin_real
 
 
-def nixsa(basepath: Path, cmd: str, args: list[str], is_verbose: bool) -> int:
+def update_bin_dir(profile_bin_dir: Path, nixsa_bin_dir: Path) -> None:
+    profile_bin_mtime = int(profile_bin_dir.stat().st_mtime)
+    nixsa_bin_mtime = int(nixsa_bin_dir.stat().st_mtime)
+    if profile_bin_mtime == nixsa_bin_mtime:
+        info('profile/bin and nixsa/bin dirs have the same mtime, skipping symlink sync.')
+        return
+    src_names = set(p.name for p in profile_bin_dir.iterdir())
+    dst_names = set()
+    for p in nixsa_bin_dir.iterdir():
+        if p.name != 'nixsa':
+            if not p.is_symlink():
+                raise RuntimeError(f'Expecting all items in bin dir to be symlinks, {p} is not a symlink')
+            if os.readlink(p) != 'nixsa':
+                raise RuntimeError(f"Expecting all items in bin dir to be symlinks to 'nixsa', {p} is not.")
+            dst_names.add(p.name)
+    if src_names == dst_names:
+        info('nixsa/bin directory is up to date with profile/bin directory.')
+    else:
+        for name in dst_names - src_names:
+            p = nixsa_bin_dir / name
+            info(f'Removing symlink {p}')
+            p.unlink()
+        for name in src_names - dst_names:
+            p = nixsa_bin_dir / name
+            info(f'Creating symlink {p} -> nixsa')
+            p.symlink_to('nixsa')
+    os.utime(nixsa_bin_dir, (profile_bin_mtime, profile_bin_mtime))
+
+
+def nixsa(basepath: Path, cmd: str, args: list[str]) -> int:
     nixpath = basepath / 'nix'
     bwrap_prefix = _get_bwrap_prefix(nixpath)
-    bash_c = _get_bash_c(basepath, cmd)
+    nix_sh = basepath / 'state/profile/etc/profile.d/nix.sh'
+    bash_c = f'source {quote(str(nix_sh))} && exec {quote(cmd)} "$@"'
     args1 = bwrap_prefix + ['bash', '-c', bash_c, '--'] + args
-    if is_verbose:
-        print(' '.join(map(quote, args1)), file=sys.stderr)
-    rc = call(args1)
-    # TODO: update bin directory
+    info(' '.join(map(quote, args1)))
+    extra_env = {
+        'NIX_USER_CONF_FILES': basepath / 'config/nix.conf',
+        'NIX_CACHE_HOME': basepath / 'cache',
+        'NIX_CONFIG_HOME': basepath / 'config',
+        'NIX_DATA_HOME': basepath / 'share',
+        'NIX_STATE_HOME': basepath / 'state',
+    }
+    env = os.environ | extra_env
+    rc = call(args1, env=env)
+    profile_bin_dir = get_real_profile_bin_dir(basepath)
+    update_bin_dir(profile_bin_dir, basepath / 'bin')
     return rc
 
 
@@ -83,7 +123,7 @@ def main(argv: list[str]) -> int:
     nixpath = basepath / 'nix'
     if not nixpath.is_dir():
         raise RuntimeError(f"{nixpath} doesn't exist or is not a directory")
-    profile_path = basepath / 'state/nix/profile'
+    profile_path = basepath / 'state/profile'
     if not profile_path.is_symlink():
         raise RuntimeError(f'{profile_path} is not a symlink')
     if argv0.is_symlink():
@@ -108,7 +148,9 @@ def main(argv: list[str]) -> int:
         cmd = argv[1]
         args = argv[2:]
 
-    rc = nixsa(basepath, cmd, args, verbose)
+    logging.basicConfig(format='nixsa: %(message)s', level=logging.INFO if verbose else logging.WARNING)
+
+    rc = nixsa(basepath, cmd, args)
     return rc
 
 
