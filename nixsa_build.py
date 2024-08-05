@@ -91,12 +91,15 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
     # Initialize the nix DB
     bwrap(outdir, [f'{nix_inst}/bin/nix-store', '--load-db'], input=reginfo)
 
+    # We use `nix-env -i` instead of `nix profile install`, since `nix profile` can seamlessly
+    # migrate from nix-env, and not the other way round, so users will be free to choose whatever they prefer.
+
     # Install the `nix` package
-    bwrap(outdir, [f'{nix_inst}/bin/nix', 'profile', 'install', nix_inst])
+    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', nix_inst])
 
     # Install an SSL certificate bundle.
     # We now use nixsa, so symlinks will be created.
-    sh([outdir / 'bin/nixsa', '-v', f'{nix_inst}/bin/nix', 'profile', 'install', cacert])
+    sh([outdir / 'bin/nixsa', '-v', f'{nix_inst}/bin/nix-env', '-i', cacert])
 
     # Install the nixpkgs channel.
     # This time we're using a symlink created by the previous step.
