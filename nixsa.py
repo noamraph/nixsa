@@ -107,7 +107,8 @@ def nixsa(basepath: Path, cmd: str, args: list[str]) -> int:
         'NIX_DATA_HOME': basepath / 'share',
         'NIX_STATE_HOME': basepath / 'state',
     }
-    env = os.environ | extra_env
+    env = os.environ.copy()
+    env.update({k: str(v) for k, v in extra_env.items()})
     rc = call(args1, env=env)
     profile_bin_dir = get_real_profile_bin_dir(basepath)
     update_bin_dir(profile_bin_dir, basepath / 'bin')
