@@ -12,3 +12,8 @@ wheels/
 # Others
 /output
 *.tar.xz
+
+
+# Added by cargo
+
+/target
