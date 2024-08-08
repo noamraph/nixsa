@@ -5,5 +5,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
+camino = "1.1.7"
+shell-quote = { version = "0.7.1", default-features = false, features = [
+    "bash",
+] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
