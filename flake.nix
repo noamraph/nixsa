@@ -66,10 +66,10 @@
             rustc = toolchain;
           };
           sharedAttrs = {
-            pname = "nixsa";
+            pname = "nixsa-bin";
             version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
             src = builtins.path {
-              name = "nixsa-source";
+              name = "nixsa-bin-source";
               path = self;
               filter = (path: type: baseNameOf path != "nix" && baseNameOf path != ".github");
             };
@@ -87,22 +87,22 @@
           };
         in
         rec {
-          nixsa = naerskLib.buildPackage sharedAttrs;
+          nixsa-bin = naerskLib.buildPackage sharedAttrs;
         } // nixpkgs.lib.optionalAttrs (prev.stdenv.system == "x86_64-linux") rec {
-          default = nixsa-static;
-          nixsa-static = naerskLib.buildPackage
+          default = nixsa-bin-static;
+          nixsa-bin-static = naerskLib.buildPackage
             (sharedAttrs // {
               CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             });
         } // nixpkgs.lib.optionalAttrs (prev.stdenv.system == "i686-linux") rec {
-          default = nixsa-static;
-          nixsa-static = naerskLib.buildPackage
+          default = nixsa-bin-static;
+          nixsa-bin-static = naerskLib.buildPackage
             (sharedAttrs // {
               CARGO_BUILD_TARGET = "i686-unknown-linux-musl";
             });
         } // nixpkgs.lib.optionalAttrs (prev.stdenv.system == "aarch64-linux") rec {
-          default = nixsa-static;
-          nixsa-static = naerskLib.buildPackage
+          default = nixsa-bin-static;
+          nixsa-bin-static = naerskLib.buildPackage
             (sharedAttrs // {
               CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             });
@@ -112,7 +112,7 @@
       devShells = forAllSystems ({ system, pkgs, ... }:
         let
           toolchain = fenixToolchain system;
-          # check = import ./nix/check.nix { inherit pkgs toolchain; };
+          check = import ./nix/check.nix { inherit pkgs toolchain; };
         in
         {
           default = pkgs.mkShell {
@@ -120,28 +120,22 @@
 
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
 
-            nativeBuildInputs = with pkgs; [ ];
-            buildInputs = with pkgs; [
+            nativeBuildInputs = [ ];
+            buildInputs = [
               toolchain
-              shellcheck
-              rust-analyzer
-              cargo-outdated
-              cacert
-              cargo-audit
-              cargo-watch
-              nixpkgs-fmt
+              pkgs.rust-analyzer
+              pkgs.cacert
+              pkgs.cargo-outdated
+              pkgs.cargo-audit
+              pkgs.cargo-watch
+              pkgs.nixpkgs-fmt
               check.check-rustfmt
               check.check-spelling
               check.check-nixpkgs-fmt
               check.check-editorconfig
               check.check-semver
               check.check-clippy
-            ]
-            ++ lib.optionals (pkgs.stdenv.isLinux) (with pkgs; [
-              checkpolicy
-              semodule-utils
-              /* users are expected to have a system docker, too */
-            ]);
+            ];
           };
         });
 
@@ -175,18 +169,16 @@
 
       packages = forAllSystems ({ system, pkgs, ... }:
         {
-          inherit (pkgs) nixsa;
+          inherit (pkgs) nixsa-bin;
         } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          inherit (pkgs) nixsa-static;
-          default = pkgs.nixsa-static;
+          inherit (pkgs) nixsa-bin-static;
+          default = pkgs.nixsa-bin-static;
         } // nixpkgs.lib.optionalAttrs (system == "i686-linux") {
-          inherit (pkgs) nixsa-static;
-          default = pkgs.nixsa-static;
+          inherit (pkgs) nixsa-bin-static;
+          default = pkgs.nixsa-bin-static;
         } // nixpkgs.lib.optionalAttrs (system == "aarch64-linux") {
-          inherit (pkgs) nixsa-static;
-          default = pkgs.nixsa-static;
-        } // nixpkgs.lib.optionalAttrs (pkgs.stdenv.isDarwin) {
-          default = pkgs.nixsa;
+          inherit (pkgs) nixsa-bin-static;
+          default = pkgs.nixsa-bin-static;
         });
 
       # hydraJobs = {
