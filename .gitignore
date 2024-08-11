@@ -13,4 +13,5 @@ wheels/
 /output
 /result
 /target
+/nixsa-bin/target
 *.tar.xz

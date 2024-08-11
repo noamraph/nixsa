@@ -67,10 +67,10 @@
           };
           sharedAttrs = {
             pname = "nixsa-bin";
-            version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+            version = (builtins.fromTOML (builtins.readFile nixsa-bin/Cargo.toml)).package.version;
             src = builtins.path {
               name = "nixsa-bin-source";
-              path = self;
+              path = ./nixsa-bin;
               filter = (path: type: baseNameOf path != "nix" && baseNameOf path != ".github");
             };
 
@@ -167,16 +167,9 @@
           '';
         });
 
-      packages = forAllSystems ({ system, pkgs, ... }:
+      packages = forAllSystems ({ pkgs, ... }:
         {
           inherit (pkgs) nixsa-bin;
-        } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          inherit (pkgs) nixsa-bin-static;
-          default = pkgs.nixsa-bin-static;
-        } // nixpkgs.lib.optionalAttrs (system == "i686-linux") {
-          inherit (pkgs) nixsa-bin-static;
-          default = pkgs.nixsa-bin-static;
-        } // nixpkgs.lib.optionalAttrs (system == "aarch64-linux") {
           inherit (pkgs) nixsa-bin-static;
           default = pkgs.nixsa-bin-static;
         });
