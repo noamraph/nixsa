@@ -61,6 +61,8 @@ jobs:
         with:
           path: nixsa.tar.xz
           key: x86_64-linux-artifacts-${{ github.sha }}
+      - name: Install bubblewrap
+        run: sudo apt-get -y install bubblewrap
       - name: Check tarball
         run: nixsa-build/check_tarball.py nixsa.tar.xz
 

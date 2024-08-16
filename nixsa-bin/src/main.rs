@@ -38,6 +38,14 @@ options:
   -v, --verbose   show the commands which are run
 ";
 
+fn verify_bwrap() -> Result<()> {
+    let output = Command::new("bwrap").arg("--version").output();
+    if output.is_err() {
+        bail!("Couldn't run `bwrap --version`. bubblewrap is probably not installed. Try: sudo apt install bubblewrap")
+    }
+    Ok(())
+}
+
 fn get_bwrap_prefix(nixpath: &Utf8Path) -> Result<Vec<String>> {
     let mut args: Vec<String> = vec!["bwrap".into(), "--bind".into(), nixpath.to_string(), "/nix".into()];
     args.extend(["--proc".into(), "/proc".into(), "--dev".into(), "/dev".into()]);
@@ -175,6 +183,8 @@ fn quote(s: &str) -> String {
 }
 
 fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
+    verify_bwrap()?;
+
     let nixpath = basepath.join("nix");
     let bwrap_prefix = get_bwrap_prefix(&nixpath)?;
     let nix_sh = basepath.join("state/profile/etc/profile.d/nix.sh");

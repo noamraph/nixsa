@@ -204,8 +204,8 @@
               src = ./nixsa-build;
               buildInputs = [ pkgs.xz ];
               buildPhase = ''
-                dir=nixsa-${version}-${system}
-                fn=$dir.tar.xz
+                dir=nixsa
+                fn=nixsa-${version}-${system}.tar.xz
                 mkdir $dir
                 cp -a ${nixsa-dir}/* $dir/
                 chmod -R u+w $dir
