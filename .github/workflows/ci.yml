@@ -37,17 +37,15 @@ jobs:
         with:
           use-gha-cache: false
       - name: Check rustfmt
-        run: nix develop --command check-rustfmt
+        run: nix develop --command bash -c 'cd nixsa-bin && check-rustfmt'
       - name: Check Clippy
-        run: nix develop --command check-clippy
+        run: nix develop --command bash -c 'cd nixsa-bin && check-clippy'
       - name: Check Spelling
-        run: nix develop --command check-spelling
+        run: nix develop --command bash -c 'cd nixsa-bin && check-spelling'
       - name: Check nixpkgs-fmt formatting
-        run: nix develop --command check-nixpkgs-fmt
+        run: nix develop --command bash -c 'cd nixsa-bin && check-nixpkgs-fmt'
       - name: Check EditorConfig conformance
-        run: nix develop --command check-editorconfig
-      - name: Shell check for nix-installer.sh
-        run: nix develop --command shellcheck ./nix-installer.sh
+        run: nix develop --command bash -c 'cd nixsa-bin && check-editorconfig'
 
   run-x86_64-linux:
     name: Run x86_64 Linux
