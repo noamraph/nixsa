@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 from pathlib import Path
 from shlex import quote
@@ -21,6 +20,8 @@ max-jobs = auto
 extra-nix-path = nixpkgs=flake:nixpkgs
 upgrade-nix-store-path-url = https://install.determinate.systems/nix-upgrade/stable/universal
 """
+
+NIXSA_TOML = '# This file is just a marker, used by the nixsa executable to find the nixsa folder root.\n'
 
 
 # pylint: disable=redefined-builtin
@@ -51,39 +52,28 @@ def bwrap(outdir: Path, args: list[str | Path], input: bytes | None = None) -> N
     sh(args1, input, env=env)
 
 
-def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
-    if not nix_archive.exists():
-        raise RuntimeError(f"{nix_archive} doesn't exist")
+def nixsa_build(closure_info: Path, outdir: Path) -> None:
+    store_paths = closure_info.joinpath('store-paths').read_text().split()
+    (nix_inst,) = [path for path in store_paths if '-nix-' in path]
+    (cacert_inst,) = [path for path in store_paths if '-cacert-' in path]
+    (nixsa_inst,) = [path for path in store_paths if '-nixsa-bin-' in path]
+    reginfo = closure_info.joinpath('registration').read_bytes()
+
     if outdir.exists():
         raise RuntimeError(f'{outdir} must not exist before the call')
     outdir = outdir.absolute()
     outdir.mkdir()
 
-    sh(['tar', '-C', outdir, '-xf', nix_archive])
-    children = list(outdir.iterdir())
-    if len(children) != 1:
-        raise RuntimeError('Expecting one main directory in archive')
-    (extracted,) = children
-    assert extracted.is_dir()
-    outdir.joinpath('nix').mkdir()
-    extracted.joinpath('store').rename(outdir / 'nix/store')
-    install_script = extracted.joinpath('install').read_text()
-    reginfo = extracted.joinpath('.reginfo').read_bytes()
-    for p in extracted.iterdir():
-        p.unlink()
-    extracted.rmdir()
-
     nix_dir = outdir / 'nix'
+    nix_dir.mkdir()
+    store_dir = nix_dir / 'store'
+    store_dir.mkdir()
+    sh(['cp', '-a'] + store_paths + [store_dir])
+
     nix_dir.joinpath('var').mkdir()
     nix_dir.joinpath('var/nix').mkdir()
-    (nix_inst,) = re.findall(r'nix="([^"]+)"', install_script)
-    (cacert,) = re.findall(r'cacert="([^"]+)"', install_script)
     bin_dir = outdir / 'bin'
     bin_dir.mkdir()
-    nixsa = bin_dir / 'nixsa'
-    nixsa_s = nixsa_src.read_bytes()
-    nixsa.write_bytes(nixsa_s)
-    nixsa.chmod(0o555)
 
     # Create user directories
     state_dir = outdir / 'state'
@@ -105,24 +95,29 @@ def nixsa_build(nix_archive: Path, nixsa_src: Path, outdir: Path) -> None:
     # We use `nix-env -i` instead of `nix profile install`, since `nix profile` can seamlessly
     # migrate from nix-env, and not the other way round, so users will be free to choose whatever they prefer.
 
-    # Install the `nix` package
-    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', nix_inst])
+    # Install the nix, cacert and nixsa package
+    bwrap(outdir, [f'{nix_inst}/bin/nix-env', '-i', nix_inst, cacert_inst, nixsa_inst])
 
-    # Install an SSL certificate bundle.
-    # We now use nixsa, so symlinks will be created.
-    sh([outdir / 'bin/nixsa', '-v', f'{nix_inst}/bin/nix-env', '-i', cacert])
+    # Create a symlink bin/nixsa
+    nixsa_inst_base = Path(nixsa_inst).name
+    bin_dir.joinpath('nixsa').symlink_to(f'../nix/store/{nixsa_inst_base}/bin/nixsa')
+
+    # Create the `nixsa.toml` marker file
+    outdir.joinpath('nixsa.toml').write_text(NIXSA_TOML)
+
+    # Create symlinks
+    sh([outdir / 'bin/nixsa', '--symlinks'])
 
 
 def main() -> None:
     from argparse import ArgumentParser
 
     parser = ArgumentParser(description='build the nixsa directory')
-    parser.add_argument('nix_archive', type=Path, help='path to nix installer archive (.tar.xz)')
-    parser.add_argument('nixsa_src', type=Path, help='path to the nixsa executable')
+    parser.add_argument('closure_info', type=Path, help='path to a closure info dir, made of nix, cacert and nixsa-bin')
     parser.add_argument('outdir', type=Path)
     args = parser.parse_args()
 
-    nixsa_build(args.nix_archive, args.nixsa_src, args.outdir)
+    nixsa_build(args.closure_info, args.outdir)
 
 
 if __name__ == '__main__':

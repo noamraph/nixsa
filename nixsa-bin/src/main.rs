@@ -1,8 +1,9 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use shell_quote::{Bash, QuoteRefExt};
 use std::collections::HashSet;
 use std::os::unix::{fs::symlink, process::ExitStatusExt};
+use std::path::absolute;
 use std::process::{Command, ExitCode};
 use std::{env, fs};
 use tracing::{info, warn, Level};
@@ -10,26 +11,31 @@ use tracing_subscriber::FmtSubscriber;
 
 const DESCRIPTION: &str = "\
 Usage:
-nixsa [-h] [-v] [cmd [arg [arg ...]]
+nixsa [-h] [-s] [-v] [cmd [arg [arg ...]]
 
 Run a command in the nixsa (Nix Standalone) environment.
 
-Assuming realpath(argv[0]) is $NIXSA/bin/nixsa, will use bwrap to run the command with $NIXSA/nix
-binded to /nix.
+Assuming $NIXSA is the nixsa folder, meaning $NIXSA/nixsa.toml exists, will use
+bwrap to run the command with $NIXSA/nix binded to /nix.
 
-If run as a symlink, the symlink will be used as the command. So, if $NIXSA/bin/nix is a symlink to `nixsa`,
-Running `$NIXSA/bin/nix --help` is the same as running `$NIXSA/bin/nixsa nix --help`.
+argv[0] will be resolved until dirname(dirname(path)) contains a file called
+`nixsa.toml`. Then, if basename(path) is not 'nixsa', basename(path) will be
+used as the command. So, if $NIXSA/bin/nix is a symlink to `nixsa`, running
+`$NIXSA/bin/nix --help` is the same as running `$NIXSA/bin/nixsa nix --help`.
 
-If no arguments are given, and not run as a symlink, will run use $SHELL as the command.
+If no arguments are given, and basename(path) is 'nixsa', $SHELL will be used
+as the command.
 
-After running the command, the entries in the $NIXSA/bin directories will be updated
-with symlinks to `nixsa` according to the entries in $NIXSA/state/profile/bin.
-The mtime of the $NIXSA/bin directory will be set to the mtime of the $NIXSA/state/profile
-symlink. This allows to skip the update if the profile wasn't updated.
+After running the command, the entries in the $NIXSA/bin directories will be
+updated with symlinks to `nixsa` according to the entries in
+$NIXSA/state/profile/bin. This will only be done if $NIXSA/bin was modified
+before $NIXSA/state/profile, so the update will be skipped if the profile
+wasn't updated.
 
 options:
-  -h, --help     show this help message and exit
-  -v, --verbose  show the commands which are run
+  -h, --help      show this help message and exit
+  -s, --symlinks  update symlinks, regardless of modification time, and exit.
+  -v, --verbose   show the commands which are run
 ";
 
 fn get_bwrap_prefix(nixpath: &Utf8Path) -> Result<Vec<String>> {
@@ -67,40 +73,77 @@ fn get_real_profile_bin_dir(basepath: &Utf8Path) -> Result<Utf8PathBuf> {
     Ok(cur_profile_bin_real)
 }
 
-/// Update the symlinks in the nixsa/bin directory based on the profile bin directory
-fn update_bin_dir(basepath: &Utf8Path) -> Result<()> {
-    let profiles_dir = basepath.join("state/profiles");
-    let profiles_mtime = profiles_dir.metadata()?.modified()?;
-    let nixsa_bin_dir = basepath.join("bin");
-    let nixsa_bin_mtime = nixsa_bin_dir.metadata()?.modified()?;
-    if nixsa_bin_mtime >= profiles_mtime {
-        info!("bin dir modification time is later than the state/profiles mtime, skipping symlink sync.");
-        return Ok(());
-    }
-
-    let profile_bin_dir = get_real_profile_bin_dir(basepath)?;
+fn read_profile_bin_dir(profile_bin_dir: &Utf8Path) -> Result<(HashSet<String>, Utf8PathBuf)> {
     let mut src_names = HashSet::<String>::new();
+    let mut nixsa_link = Option::<Utf8PathBuf>::None;
     for entry in profile_bin_dir.read_dir_utf8()? {
-        src_names.insert(entry?.file_name().into());
+        let name: String = entry?.file_name().into();
+        if name == "nixsa" {
+            let link = profile_bin_dir.join("nixsa").read_link_utf8()?;
+            if !link.as_str().starts_with("/nix/store/") {
+                bail!("Expecting `nixsa` symlink in profile dir to start with `/nix/store`, is {}", link);
+            }
+            nixsa_link = Some(link);
+        } else {
+            src_names.insert(name);
+        }
     }
-    let src_names = src_names;
+    let nixsa_link = match nixsa_link {
+        None => {
+            bail!("The profile bin directory doesn't contain a `nixsa` entry. Not updating bin/ symlinks.")
+        }
+        Some(link) => link,
+    };
+    Ok((src_names, nixsa_link))
+}
+
+fn read_nixsa_bin_dir(nixsa_bin_dir: &Utf8Path) -> Result<(HashSet<String>, Option<Utf8PathBuf>)> {
     let mut dst_names = HashSet::<String>::new();
+    let mut cur_nixsa_link = Option::<Utf8PathBuf>::None;
     for entry in nixsa_bin_dir.read_dir_utf8()? {
         let entry = entry?;
         let path = entry.path();
         let name = entry.file_name();
-        if name != "nixsa" {
-            if !path.is_symlink() {
-                bail!("Expecting all items in bin dir to be symlinks, {:?} is not a symlink", path);
-            }
-            if path.read_link_utf8()?.as_str() != "nixsa" {
+        if !path.is_symlink() {
+            bail!("Expecting all items in bin dir to be symlinks, {:?} is not a symlink", path);
+        }
+        let link = path.read_link_utf8()?;
+        if name == "nixsa" {
+            cur_nixsa_link = Some(link);
+        } else {
+            if link != "nixsa" {
                 bail!("Expecting all items in bin dir to be symlinks to 'nixsa', {:?} is not", path);
             }
             dst_names.insert(name.into());
         }
     }
-    let dst_names = dst_names;
-    if src_names == dst_names {
+    Ok((dst_names, cur_nixsa_link))
+}
+
+/// Update the symlinks in the nixsa/bin directory based on the profile bin directory
+fn update_bin_dir(basepath: &Utf8Path, ignore_mtime: bool) -> Result<()> {
+    let profiles_dir = basepath.join("state/profiles");
+    let profiles_mtime = profiles_dir.metadata()?.modified()?;
+    let nixsa_bin_dir = basepath.join("bin");
+    if !ignore_mtime {
+        let nixsa_bin_mtime = nixsa_bin_dir.metadata()?.modified()?;
+        if nixsa_bin_mtime >= profiles_mtime {
+            info!("bin dir modification time is later than the state/profiles mtime, skipping symlink sync.");
+            return Ok(());
+        }
+    }
+
+    let profile_bin_dir = get_real_profile_bin_dir(basepath)?;
+    let (src_names, nixsa_link) = read_profile_bin_dir(&profile_bin_dir)?;
+    let (dst_names, cur_nixsa_link) = read_nixsa_bin_dir(&nixsa_bin_dir)?;
+
+    let nixsa_rel_link = Utf8PathBuf::from("../").join(&nixsa_link.as_str()[1..]);
+    if !nixsa_bin_dir.join(&nixsa_rel_link).exists() {
+        bail!("nixsa link in profile doesn't exist: {}", nixsa_bin_dir.join(&nixsa_rel_link));
+    }
+
+    let cur_nixsa_link_uptodate = cur_nixsa_link.as_ref().is_some_and(|link| *link == nixsa_rel_link);
+    if src_names == dst_names && cur_nixsa_link_uptodate {
         info!("nixsa/bin directory is up to date with profile/bin directory.");
     } else {
         for name in dst_names.difference(&src_names) {
@@ -112,6 +155,16 @@ fn update_bin_dir(basepath: &Utf8Path) -> Result<()> {
             let path = nixsa_bin_dir.join(name);
             info!("Creating symlink {:?} -> nixsa", path);
             symlink("nixsa", path)?;
+        }
+        if !cur_nixsa_link_uptodate {
+            let path = nixsa_bin_dir.join("nixsa");
+            if cur_nixsa_link.is_some() {
+                info!("Removing symlink {:?}", path);
+                fs::remove_file(&path)?;
+            }
+            info!("Creating symlink {:?} -> {:?}", path, nixsa_rel_link);
+            symlink(nixsa_rel_link, &path)?;
+            assert!(path.exists());
         }
     }
     Ok(())
@@ -146,7 +199,7 @@ fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
     );
 
     let status = Command::new(&args1[0]).args(&args1[1..]).envs(extra_env).status()?;
-    update_bin_dir(basepath)?;
+    update_bin_dir(basepath, false)?;
     let code = u8::try_from(match status.code() {
         Some(code) => code,
         None => {
@@ -158,51 +211,96 @@ fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
     .expect("Code should fit u8");
     Ok(ExitCode::from(code))
 }
+
+/// Get the nixsa root dir, and the symlink name, if path is in DIR/bin and DIR/nixsa.toml exists.
+fn get_nixsa_root_and_name_if_in_bin(path: &Utf8Path) -> Option<(Utf8PathBuf, String)> {
+    let name = path.file_name();
+    if let Some(name) = name {
+        let parent = path.parent();
+        if let Some(parent) = parent {
+            if parent.file_name() == Some("bin") {
+                let parent2 = parent.parent();
+                if let Some(parent2) = parent2 {
+                    if parent2.join("nixsa.toml").exists() {
+                        return Some((parent2.to_owned(), name.to_owned()));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+// Resolve symlinks until a path which is in NIXSA/bin is found, return NIXSA and the symlink name
+fn find_root_and_name(path: &Utf8Path) -> Result<(Utf8PathBuf, String)> {
+    let mut path = Utf8PathBuf::from_path_buf(absolute(path)?).expect("Expecting only UTF-8 paths");
+    if !path.exists() {
+        bail!("{} doesn't refer to a valid file", path);
+    }
+    loop {
+        if let Some((nixsa_root, name)) = get_nixsa_root_and_name_if_in_bin(&path) {
+            return Ok((nixsa_root, name));
+        }
+        if path.is_symlink() {
+            path = path.parent().expect("Expecting a parent").join(path.read_link_utf8()?);
+        } else {
+            bail!("{} isn't inside a NIXSA/bin directory", path);
+        }
+    }
+}
 enum ParsedArgs {
     Help,
+    Symlinks { basepath: Utf8PathBuf },
     Run { basepath: Utf8PathBuf, cmd: String, args: Vec<String>, verbose: bool },
 }
 
 fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
     let argv0 = Utf8PathBuf::from(args[0].clone());
-    let resolved = argv0.canonicalize_utf8()?;
-    let mydir = resolved.parent().expect("Expecting resolved executable to have a parent");
-    if mydir.file_name() != Some("bin") {
-        bail!("The nixsa executable must be in a directory called 'bin', is {:?}", mydir);
-    }
-    let basepath = mydir.parent().context("The nixsa executable should be under at least two dirs")?;
-    let nixpath = basepath.join("nix");
-    if !nixpath.is_dir() {
-        bail!("{:?} doesn't exist or is not a directory", nixpath);
-    }
-    let profile_path = basepath.join("state/profile");
-    if !profile_path.is_symlink() {
-        bail!("{:?} is not a symlink", profile_path);
-    }
-    if argv0.is_symlink() {
-        // TODO: It's better to use just the last redirection, since it allows to symlink to the symlink
-        // without preserving the name.
-        let cmd: String = argv0.file_name().expect("The symlink should have a file_name").to_owned();
-        Ok(ParsedArgs::Run { basepath: basepath.into(), cmd, args: args[1..].into(), verbose: false })
-    } else {
-        if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
-            return Ok(ParsedArgs::Help);
+    let root_and_name = find_root_and_name(&argv0);
+    match root_and_name {
+        Err(e) => {
+            if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
+                Ok(ParsedArgs::Help)
+            } else {
+                Err(e)
+            }
         }
+        Ok((basepath, name)) => {
+            let nixpath = basepath.join("nix");
+            if !nixpath.is_dir() {
+                bail!("{:?} doesn't exist or is not a directory", nixpath);
+            }
+            let profile_path = basepath.join("state/profile");
+            if !profile_path.is_symlink() {
+                bail!("{:?} is not a symlink", profile_path);
+            }
+            if name != "nixsa" {
+                Ok(ParsedArgs::Run { basepath, cmd: name, args: args[1..].into(), verbose: false })
+            } else {
+                if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
+                    return Ok(ParsedArgs::Help);
+                }
 
-        let mut args = args;
-        let verbose: bool;
-        if args.len() > 1 && (args[1] == "-v" || args[1] == "--verbose") {
-            verbose = true;
-            args.remove(1);
-        } else {
-            verbose = false;
+                if args.len() > 1 && (args[1] == "-s" || args[1] == "--symlinks") {
+                    return Ok(ParsedArgs::Symlinks { basepath });
+                }
+
+                let mut args = args;
+                let verbose: bool;
+                if args.len() > 1 && (args[1] == "-v" || args[1] == "--verbose") {
+                    verbose = true;
+                    args.remove(1);
+                } else {
+                    verbose = false;
+                }
+
+                if args.len() == 1 {
+                    args.push(env::var("SHELL")?);
+                }
+
+                Ok(ParsedArgs::Run { basepath, cmd: args[1].clone(), args: args[2..].into(), verbose })
+            }
         }
-
-        if args.len() == 1 {
-            args.push(env::var("SHELL")?);
-        }
-
-        Ok(ParsedArgs::Run { basepath: basepath.into(), cmd: args[1].clone(), args: args[2..].into(), verbose })
     }
 }
 
@@ -212,6 +310,13 @@ fn main() -> Result<ExitCode> {
     match args {
         ParsedArgs::Help => {
             print!("{}", DESCRIPTION);
+            Ok(ExitCode::from(0))
+        }
+        ParsedArgs::Symlinks { basepath } => {
+            let subscriber = FmtSubscriber::builder().with_max_level(Level::INFO).without_time().finish();
+            tracing::subscriber::set_global_default(subscriber)?;
+
+            update_bin_dir(&basepath, true)?;
             Ok(ExitCode::from(0))
         }
         ParsedArgs::Run { basepath, cmd, args, verbose } => {

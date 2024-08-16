@@ -17,7 +17,7 @@
     };
 
     nix = {
-      url = "github:noamraph/nix/add-nix-state-home";
+      url = "github:noamraph/nix/add-nix-state-home--disable-tests";
       # url = "https://flakehub.com/f/DeterminateSystems/nix/=2.23.3.tar.gz";
     };
   };
@@ -28,8 +28,7 @@
     , fenix
     , naersk
     , nix
-    , ...
-    } @ inputs:
+    }:
     let
       supportedSystems = [ "i686-linux" "x86_64-linux" "aarch64-linux" ];
 
@@ -66,7 +65,7 @@
             rustc = toolchain;
           };
           sharedAttrs = {
-            pname = "nixsa-bin";
+            name = "nixsa-bin";
             version = (builtins.fromTOML (builtins.readFile nixsa-bin/Cargo.toml)).package.version;
             src = builtins.path {
               name = "nixsa-bin-source";
@@ -74,7 +73,7 @@
               filter = (path: type: baseNameOf path != "nix" && baseNameOf path != ".github");
             };
 
-            nativeBuildInputs = with final; [ ];
+            nativeBuildInputs = [ ];
 
             doCheck = true;
             cargoTestOptions = f: f ++ [ "--all" ];
@@ -86,7 +85,7 @@
             };
           };
         in
-        rec {
+        {
           nixsa-bin = naerskLib.buildPackage sharedAttrs;
         } // nixpkgs.lib.optionalAttrs (prev.stdenv.system == "x86_64-linux") rec {
           default = nixsa-bin-static;
@@ -146,32 +145,39 @@
         in
         {
           check-rustfmt = pkgs.runCommand "check-rustfmt" { buildInputs = [ check.check-rustfmt ]; } ''
-            cd ${./.}
+            cd ${./nixsa-bin}
             check-rustfmt
             touch $out
           '';
           check-spelling = pkgs.runCommand "check-spelling" { buildInputs = [ check.check-spelling ]; } ''
-            cd ${./.}
+            cd ${./nixsa-bin}
             check-spelling
             touch $out
           '';
           check-nixpkgs-fmt = pkgs.runCommand "check-nixpkgs-fmt" { buildInputs = [ check.check-nixpkgs-fmt ]; } ''
-            cd ${./.}
+            cd ${./nixsa-bin}
             check-nixpkgs-fmt
             touch $out
           '';
           check-editorconfig = pkgs.runCommand "check-editorconfig" { buildInputs = [ pkgs.git check.check-editorconfig ]; } ''
-            cd ${./.}
+            cd ${./nixsa-bin}
             check-editorconfig
             touch $out
           '';
         });
 
-      packages = forAllSystems ({ pkgs, ... }:
-        {
-          inherit (pkgs) nixsa-bin;
-          inherit (pkgs) nixsa-bin-static;
-          default = pkgs.nixsa-bin-static;
+      packages = forAllSystems ({ system, pkgs, ... }:
+        rec {
+          inherit (pkgs) nixsa-bin nixsa-bin-static;
+          # nixTarball = inputs.nix.tarballs_direct.${system}
+          #   or "${inputs.nix.checks."${system}".binaryTarball}/nix-${inputs.nix.packages."${system}".default.version}-${system}.tar.xz";
+          # nixTarball = inputs.nix.checks."${system}".binaryTarball;
+          closureInfo = pkgs.buildPackages.closureInfo {
+            rootPaths = [ nix.packages."${system}".nix nix.inputs.nixpkgs.legacyPackages."${system}".cacert nixsa-bin-static ];
+          };
+          # dummy = derivation { name = "foo"; builder = "${pkgs.bash}/bin/bash"; args = [ "-c" "${pkgs.python3}/bin/python ${./test.py} ${pkgs.nixsa-bin-static}> $out" ]; system = system; };
+          #default = pkgs.nixsa-bin-static;
+          default = closureInfo;
         });
 
       # hydraJobs = {
