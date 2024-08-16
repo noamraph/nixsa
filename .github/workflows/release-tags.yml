@@ -33,7 +33,7 @@ jobs:
         run: mkdir -p ./artifacts
 
       - name: Fetch cached x86_64-linux binary
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: nixsa.tar.xz
           key: release-x86_64-linux-artifacts-${{ github.sha }}
@@ -41,7 +41,7 @@ jobs:
         run: mv ./nixsa.tar.xz ./artifacts/nixsa-x86_64-linux.tar.xz
 
       # - name: Fetch cached aarch64-linux binary
-      #   uses: actions/cache/restore@v3
+      #   uses: actions/cache/restore@v4
       #   with:
       #     path: nixsa.tar.xz
       #     key: release-aarch64-linux-artifacts-${{ github.sha }}
