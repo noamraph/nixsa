@@ -1,4 +1,4 @@
-name: Build aarch64 Linux (static)
+name: Build aarch64 Linux
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   build-aarch64-linux:
-    name: Build aarch64 Linux (static)
+    name: Build aarch64 Linux
     runs-on: namespace-profile-default-arm64
     concurrency: ${{ inputs.cache-key }}
     permissions:
@@ -27,10 +27,10 @@ jobs:
           use-gha-cache: false
       - name: Build the installer
         run: |
-          nix build .#packages.aarch64-linux.nix-installer-static -L
-          cp result/bin/nix-installer .
+          nix build .#packages.aarch64-linux.nixsa-tarball -L
+          cp result/nixsa-*.tar.xz nixsa.tar.xz
       - name: Create GitHub cache from build artifacts
         uses: actions/cache/save@v3
         with:
-          path: nix-installer
+          path: nixsa.tar.xz
           key: ${{ inputs.cache-key }}

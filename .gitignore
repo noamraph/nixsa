@@ -15,3 +15,4 @@ wheels/
 /target
 /nixsa-bin/target
 *.tar.xz
+/nixsa-*-linux
