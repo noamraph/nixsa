@@ -30,6 +30,8 @@
     , nix
     }:
     let
+      version = (builtins.fromTOML (builtins.readFile nixsa-bin/Cargo.toml)).package.version;
+
       supportedSystems = [ "i686-linux" "x86_64-linux" "aarch64-linux" ];
 
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: (forSystem system f));
@@ -66,7 +68,7 @@
           };
           sharedAttrs = {
             name = "nixsa-bin";
-            version = (builtins.fromTOML (builtins.readFile nixsa-bin/Cargo.toml)).package.version;
+            inherit version;
             src = builtins.path {
               name = "nixsa-bin-source";
               path = ./nixsa-bin;
@@ -166,19 +168,52 @@
           '';
         });
 
-      packages = forAllSystems ({ system, pkgs, ... }:
-        rec {
-          inherit (pkgs) nixsa-bin nixsa-bin-static;
-          # nixTarball = inputs.nix.tarballs_direct.${system}
-          #   or "${inputs.nix.checks."${system}".binaryTarball}/nix-${inputs.nix.packages."${system}".default.version}-${system}.tar.xz";
-          # nixTarball = inputs.nix.checks."${system}".binaryTarball;
-          closureInfo = pkgs.buildPackages.closureInfo {
-            rootPaths = [ nix.packages."${system}".nix nix.inputs.nixpkgs.legacyPackages."${system}".cacert nixsa-bin-static ];
-          };
-          # dummy = derivation { name = "foo"; builder = "${pkgs.bash}/bin/bash"; args = [ "-c" "${pkgs.python3}/bin/python ${./test.py} ${pkgs.nixsa-bin-static}> $out" ]; system = system; };
-          #default = pkgs.nixsa-bin-static;
-          default = closureInfo;
-        });
+      packages = forAllSystems
+        ({ system, pkgs, ... }:
+          rec {
+            inherit (pkgs) nixsa-bin nixsa-bin-static;
+            closureInfo = pkgs.buildPackages.closureInfo {
+              rootPaths = [
+                nix.packages."${system}".nix
+                nix.inputs.nixpkgs.legacyPackages."${system}".cacert
+                nixsa-bin-static
+              ];
+            };
+            nixsa-dir = pkgs.stdenv.mkDerivation {
+              pname = "nixsa-dir";
+              inherit version;
+              src = ./.;
+              buildInputs = [ pkgs.python3 pkgs.bubblewrap ];
+              buildPhase = ''
+                set -x
+                python3 nixsa_build.py ${closureInfo} output
+                set +x
+              '';
+              installPhase = ''
+                cp -a output $out
+              '';
+            };
+            nixsa-tarball = pkgs.stdenv.mkDerivation {
+              pname = "nixsa-tarball";
+              inherit version;
+              src = ./.;
+              buildInputs = [ pkgs.xz ];
+              buildPhase = ''
+                dir=nixsa-${version}-${system}
+                fn=$dir.tar.xz
+                mkdir $dir
+                cp -a ${nixsa-dir}/* $dir/
+                chmod -R u+w $dir
+                chmod -R u-w $dir/nix/store/*
+                tar -cvJf $fn --owner=0 --group=0 --mtime='1970-01-01' --absolute-names --hard-dereference $dir
+              '';
+              installPhase = ''
+                mkdir $out
+                cp $fn $out/
+              '';
+            };
+            default = nixsa-tarball;
+          });
 
       # hydraJobs = {
       #   vm-test = import ./nix/tests/vm-test {
