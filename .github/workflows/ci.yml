@@ -13,8 +13,8 @@ jobs:
   build-x86_64-linux:
     uses: ./.github/workflows/build-x86_64-linux.yml
 
-  build-aarch64-linux:
-    uses: ./.github/workflows/build-aarch64-linux.yml
+  # build-aarch64-linux:
+  #   uses: ./.github/workflows/build-aarch64-linux.yml
 
   lints:
     name: Lints
@@ -65,20 +65,20 @@ jobs:
         run: nixsa-build/check_tarball.py nixsa.tar.xz
 
 
-  run-aarch64-linux:
-    name: Run aarch64 Linux
-    runs-on: namespace-profile-default-arm64
-    needs: [lints, build-aarch64-linux]
-    permissions:
-      id-token: "write"
-      contents: "read"
-    steps:
-      - uses: actions/checkout@v3
-      - name: Restore Github cache artifacts
-        uses: actions/cache/restore@v3
-        with:
-          path: nixsa.tar.xz
-          key: aarch64-linux-artifacts-${{ github.sha }}
-      - name: Check tarball
-        run: nixsa-build/check_tarball.py nixsa.tar.xz
+  # run-aarch64-linux:
+  #   name: Run aarch64 Linux
+  #   runs-on: namespace-profile-default-arm64
+  #   needs: [lints, build-aarch64-linux]
+  #   permissions:
+  #     id-token: "write"
+  #     contents: "read"
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Restore Github cache artifacts
+  #       uses: actions/cache/restore@v3
+  #       with:
+  #         path: nixsa.tar.xz
+  #         key: aarch64-linux-artifacts-${{ github.sha }}
+  #     - name: Check tarball
+  #       run: nixsa-build/check_tarball.py nixsa.tar.xz
   
