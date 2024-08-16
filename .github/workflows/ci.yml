@@ -28,8 +28,10 @@ jobs:
         with:
           path: nixsa.tar.xz
           key: x86_64-linux-artifacts-b329ab448f3f377aec7ec37f4b79ca4c087d1241
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+      - name: Install bubblewrap
+        run: sudo apt-get -y install bubblewrap
       - name: Check tarball
         run: nixsa-build/check_tarball.py nixsa.tar.xz
 
