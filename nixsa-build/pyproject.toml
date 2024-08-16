@@ -1,10 +1,10 @@
 [project]
-name = "nixsa"
+name = "nixsa-build"
 version = "0.1.0"
-description = "Add your description here"
+description = "build the nixsa dir"
 authors = [{ name = "Noam Yorav-Raphael", email = "noamraph@gmail.com" }]
 dependencies = []
-readme = "README.md"
+readme = "../README.md"
 requires-python = ">= 3.8"
 
 [build-system]
@@ -23,9 +23,6 @@ dev-dependencies = [
 
 [tool.hatch.metadata]
 allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/nixsa"]
 
 [tool.ruff]
 line-length = 120

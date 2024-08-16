@@ -166,6 +166,11 @@
             check-editorconfig
             touch $out
           '';
+          check-ruff = pkgs.runCommand "check-ruff" { buildInputs = [ check.check-ruff ]; } ''
+            cd ${./nixsa-build}
+            check-ruff
+            touch $out
+          '';
         });
 
       packages = forAllSystems
@@ -182,7 +187,7 @@
             nixsa-dir = pkgs.stdenv.mkDerivation {
               pname = "nixsa-dir";
               inherit version;
-              src = ./.;
+              src = ./nixsa-build;
               buildInputs = [ pkgs.python3 pkgs.bubblewrap ];
               buildPhase = ''
                 set -x
@@ -196,7 +201,7 @@
             nixsa-tarball = pkgs.stdenv.mkDerivation {
               pname = "nixsa-tarball";
               inherit version;
-              src = ./.;
+              src = ./nixsa-build;
               buildInputs = [ pkgs.xz ];
               buildPhase = ''
                 dir=nixsa-${version}-${system}

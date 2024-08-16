@@ -51,12 +51,22 @@ in
       cargo-semver-checks semver-checks check-release
     '';
   });
+
   # Clippy
   check-clippy = (writeShellApplication {
     name = "check-clippy";
     runtimeInputs = with pkgs; [ cargo clippy rustc ];
     text = ''
       cargo clippy
+    '';
+  });
+
+  # Ruff
+  check-ruff = (writeShellApplication {
+    name = "check-ruff";
+    runtimeInputs = [ pkgs.ruff ];
+    text = ''
+      ruff check
     '';
   });
 

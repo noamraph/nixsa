@@ -2,31 +2,23 @@
 parallel = true
 
 [pre-commit.commands.ruff]
+root = "nixsa-build"
 glob = "*.py"
 run = ".venv/bin/ruff check --fix --exit-non-zero-on-fix {all_files}"
 
 [pre-commit.commands.ruff-fmt]
+root = "nixsa-build"
 glob = "*.py"
 # Needed since currenty ruff-fmt doesn't support both fixing and returning non-zero on change.
 # See https://github.com/astral-sh/ruff/issues/8191
 run = "if ! .venv/bin/ruff format --check {all_files}; then .venv/bin/ruff format {all_files}; false; fi"
 
 [pre-commit.commands.pylint]
+root = "nixsa-build"
 glob = "*.py"
 run = ".venv/bin/pylint -rn -sn {all_files}"
 
 [pre-commit.commands.mypy]
+root = "nixsa-build"
 glob = "*.py"
 run = ".venv/bin/mypy --strict {all_files}"
-
-[pre-commit.commands.cargo-fmt]
-root = "tools/trail/trail_gcc"
-glob = "*.rs"
-# I add {all_files} as a comment because otherwise `leftcommit run --all-files pre-commit` only runs on staged files
-run = "if ! cargo fmt -- --check --files-with-diff ; then cargo fmt; false; fi # {all_files}"
-
-[pre-commit.commands.clippy]
-root = "tools/trail/trail_gcc"
-glob = "*.rs"
-# I add {all_files} as a comment because otherwise `leftcommit run --all-files pre-commit` only runs on staged files
-run = "cargo clippy -q -- -Dwarnings # {all_files}"
