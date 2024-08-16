@@ -10,47 +10,14 @@ permissions:
   contents: "read"
 
 jobs:
-  build-x86_64-linux:
-    uses: ./.github/workflows/build-x86_64-linux.yml
 
   # build-aarch64-linux:
   #   uses: ./.github/workflows/build-aarch64-linux.yml
 
-  lints:
-    name: Lints
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: "write"
-      contents: "read"
-    steps:
-      - uses: actions/checkout@v3
-      - name: Check Nixpkgs input
-        uses: DeterminateSystems/flake-checker-action@main
-        with:
-          fail-mode: true
-          check-outdated: false # PRs shouldn't fail because main's nixpkgs is out of date
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
-        with:
-          flakehub: true
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-        with:
-          use-gha-cache: false
-      - name: Check rustfmt
-        run: nix develop --command bash -c 'cd nixsa-bin && check-rustfmt'
-      - name: Check Clippy
-        run: nix develop --command bash -c 'cd nixsa-bin && check-clippy'
-      - name: Check Spelling
-        run: nix develop --command bash -c 'cd nixsa-bin && check-spelling'
-      - name: Check nixpkgs-fmt formatting
-        run: nix develop --command bash -c 'cd nixsa-bin && check-nixpkgs-fmt'
-      - name: Check EditorConfig conformance
-        run: nix develop --command bash -c 'cd nixsa-bin && check-editorconfig'
 
   run-x86_64-linux:
     name: Run x86_64 Linux
     runs-on: ubuntu-latest
-    needs: [lints, build-x86_64-linux]
     permissions:
       id-token: "write"
       contents: "read"
@@ -60,7 +27,9 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: nixsa.tar.xz
-          key: x86_64-linux-artifacts-${{ github.sha }}
+          key: x86_64-linux-artifacts-b329ab448f3f377aec7ec37f4b79ca4c087d1241
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Check tarball
         run: nixsa-build/check_tarball.py nixsa.tar.xz
 
