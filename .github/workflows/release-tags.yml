@@ -9,6 +9,7 @@ on:
       - "v*.*.*"
 
 permissions:
+  id-token: write
   contents: write # In order to upload artifacts to GitHub releases
 
 jobs:
