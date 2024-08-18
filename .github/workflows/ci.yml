@@ -59,12 +59,12 @@ jobs:
       - name: Restore Github cache artifacts
         uses: actions/cache/restore@v4
         with:
-          path: nixsa.tar.xz
+          path: nixsa-*.tar.xz
           key: x86_64-linux-artifacts-${{ github.sha }}
       - name: Install bubblewrap
         run: sudo apt-get -y install bubblewrap
       - name: Check tarball
-        run: nixsa-build/check_tarball.py nixsa.tar.xz
+        run: nixsa-build/check_tarball.py nixsa-*.tar.xz
 
 
   # run-aarch64-linux:
@@ -79,8 +79,8 @@ jobs:
   #     - name: Restore Github cache artifacts
   #       uses: actions/cache/restore@v4
   #       with:
-  #         path: nixsa.tar.xz
+  #         path: nixsa-*.tar.xz
   #         key: aarch64-linux-artifacts-${{ github.sha }}
   #     - name: Check tarball
-  #       run: nixsa-build/check_tarball.py nixsa.tar.xz
+  #       run: nixsa-build/check_tarball.py nixsa-*.tar.xz
   

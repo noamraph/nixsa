@@ -36,18 +36,18 @@ jobs:
       - name: Fetch cached x86_64-linux binary
         uses: actions/cache/restore@v4
         with:
-          path: nixsa.tar.xz
+          path: nixsa-*.tar.xz
           key: release-x86_64-linux-artifacts-${{ github.sha }}
       - name: Move artifact to artifacts directory
-        run: mv ./nixsa.tar.xz ./artifacts/nixsa-x86_64-linux.tar.xz
+        run: mv ./nixsa-*.tar.xz ./artifacts/
 
       # - name: Fetch cached aarch64-linux binary
       #   uses: actions/cache/restore@v4
       #   with:
-      #     path: nixsa.tar.xz
+      #     path: nixsa-*.tar.xz
       #     key: release-aarch64-linux-artifacts-${{ github.sha }}
       # - name: Move artifact to artifacts directory
-      #   run: mv ./nixsa.tar.xz ./artifacts/nixsa-aarch64-linux.tar.xz
+      #   run: mv ./nixsa-*.tar.xz ./artifacts/
 
       - name: Publish Release to GitHub (Tag)
         uses: softprops/action-gh-release@v2

@@ -25,12 +25,12 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-gha-cache: false
-      - name: Build the installer
+      - name: Build the tarball
         run: |
           nix build .#packages.x86_64-linux.nixsa-tarball -L
-          cp result/nixsa-*.tar.xz nixsa.tar.xz
+          cp result/nixsa-*.tar.xz .
       - name: Create GitHub cache from build artifacts
         uses: actions/cache/save@v4
         with:
-          path: nixsa.tar.xz
+          path: nixsa-*.tar.xz
           key: ${{ inputs.cache-key }}
