@@ -4,6 +4,8 @@
   description = "The Nixsa standalone nix tarball";
 
   inputs = {
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.0.tar.gz";
+
     fenix = {
       url = "https://flakehub.com/f/nix-community/fenix/0.1.1584.tar.gz";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -22,6 +24,7 @@
 
   outputs =
     { self
+    , nixpkgs
     , fenix
     , naersk
     , nix
@@ -30,8 +33,6 @@
       version = (builtins.fromTOML (builtins.readFile nixsa-bin/Cargo.toml)).package.version;
 
       supportedSystems = [ "i686-linux" "x86_64-linux" "aarch64-linux" ];
-
-      nixpkgs = nix.inputs.nixpkgs.legacyPackages;
 
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: (forSystem system f));
 
