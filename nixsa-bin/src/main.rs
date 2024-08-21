@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use libc::{signal, SIGINT, SIG_IGN};
 use shell_quote::{Bash, QuoteRefExt};
 use std::collections::HashSet;
 use std::os::unix::{fs::symlink, process::ExitStatusExt};
@@ -182,8 +183,15 @@ fn quote(s: &str) -> String {
     s.quoted(Bash)
 }
 
+fn ignore_sigint() {
+    unsafe {
+        signal(SIGINT, SIG_IGN);
+    }
+}
+
 fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
     verify_bwrap()?;
+    ignore_sigint();
 
     let nixpath = basepath.join("nix");
     let bwrap_prefix = get_bwrap_prefix(&nixpath)?;
