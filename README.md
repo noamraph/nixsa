@@ -1,4 +1,4 @@
-# Nixsa - Nix Standalone Environment
+# Nixsa - A Nix Standalone Environment
 
 Nixsa lets you use Nix without any installation. Just extract the tarball and you're ready to go! All state and configuration remain within the `nixsa` folder.
 
