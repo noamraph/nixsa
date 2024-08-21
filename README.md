@@ -42,7 +42,9 @@ bwrap \
   --dev /dev \
   --bind /home /home \
   ...
-  bash -c 'source /home/noamraph/nixsa-dir/state/profile/etc/profile.d/nix.sh && exec ponysay "$@"' -- hello
+  bash -c 'source /home/noamraph/nixsa-dir/state/profile/etc/profile.d/nix.sh &&
+           exec ponysay "$@"' \
+  -- hello
 ```
 
 This command:
