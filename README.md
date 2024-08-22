@@ -22,6 +22,8 @@ Important note: Nixsa currently uses a patched version of Nix, which supports en
 
 One more feature: run `nixsa/bin/nixsa` to start a shell where `/nix` is binded to `nixsa/nix`, and where all the commands in the Nix profile (in `nixsa/state/profile`) are in the PATH.
 
+Tip: You can add the `nixsa/bin` folder to your `$PATH`, to have the installed Nix packages readily available.
+
 ## How does it work?
 
 Nixsa uses [Bubblewrap](https://github.com/containers/bubblewrap), a sandboxing tool, to run the commands in an environment where `/nix` is binded to the `nix` subfolder of the `nixsa` folder.
