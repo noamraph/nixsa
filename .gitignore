@@ -16,3 +16,4 @@ wheels/
 /nixsa-bin/target
 *.tar.xz
 /nixsa
+check-tarball-*

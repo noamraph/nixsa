@@ -1,5 +1,5 @@
-use anyhow::{bail, Result};
-use camino::{absolute_utf8, Utf8Path, Utf8PathBuf};
+use anyhow::{bail, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use libc::{signal, SIGINT, SIG_IGN};
 use shell_quote::{Bash, QuoteRefExt};
 use std::collections::HashSet;
@@ -11,31 +11,35 @@ use tracing_subscriber::FmtSubscriber;
 
 const DESCRIPTION: &str = "\
 Usage:
-nixsa [-h] [-s] [-v] [cmd [arg [arg ...]]
+nixsa [options] [cmd [arg [arg ...]]
 
-Run a command in the nixsa (Nix Standalone) environment.
+Run a command in the Nixsa (Nix Standalone) environment.
 
-Assuming $NIXSA is the nixsa folder, meaning $NIXSA/nixsa.toml exists, will use
-bwrap to run the command with $NIXSA/nix binded to /nix.
+Assuming NIXSA is the Nixsa folder, meaning NIXSA/nixsa.toml exists, will use
+bwrap to run the command with NIXSA/nix binded to /nix.
 
-argv[0] will be resolved until dirname(dirname(path)) contains a file called
-`nixsa.toml`. Then, if basename(path) is not 'nixsa', basename(path) will be
-used as the command. So, if $NIXSA/bin/nix is a symlink to `nixsa`, running
-`$NIXSA/bin/nix --help` is the same as running `$NIXSA/bin/nixsa nix --help`.
+The Nixsa folder is found by using /proc/self/exe to find the canonical path
+of the nixsa executable, and going upwards until a directory which contains
+`nixsa.toml` is found.
 
-If no arguments are given, and basename(path) is 'nixsa', $SHELL will be used
+If basename(argv[0]) is not 'nixsa', meaning that we run by a symlink,
+basename(argv[0]) will be used as the command, and no argument parsing is done.
+So, if NIXSA/bin/nix is a symlink to `nixsa`, running `NIXSA/bin/nix --help`
+is the same as running `NIXSA/bin/nixsa nix --help`.
+
+If no arguments are given, and basename(argv[0]) is 'nixsa', $SHELL will be used
 as the command.
 
-After running the command, the entries in the $NIXSA/bin directories will be
+After running the command, the entries in the NIXSA/bin directories will be
 updated with symlinks to `nixsa` according to the entries in
-$NIXSA/state/profile/bin. This will only be done if $NIXSA/bin was modified
-before $NIXSA/state/profile, so the update will be skipped if the profile
+NIXSA/state/profile/bin. This will only be done if NIXSA/bin was modified
+before NIXSA/state/profile, so the update will be skipped if the profile
 wasn't updated.
 
-options:
-  -h, --help      show this help message and exit
-  -s, --symlinks  update symlinks, regardless of modification time, and exit.
-  -v, --verbose   show the commands which are run
+Options:
+  -h, --help       show this help message and exit.
+  -s, --symlinks   update symlinks, regardless of modification time, and exit.
+  -v, --verbose    show the commands which are run.
 ";
 
 fn verify_bwrap() -> Result<()> {
@@ -229,42 +233,21 @@ fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
     Ok(ExitCode::from(code))
 }
 
-/// Get the nixsa root dir, and the symlink name, if path is in DIR/bin and DIR/nixsa.toml exists.
-fn get_nixsa_root_and_name_if_in_bin(path: &Utf8Path) -> Option<(Utf8PathBuf, String)> {
-    let name = path.file_name();
-    if let Some(name) = name {
-        let parent = path.parent();
-        if let Some(parent) = parent {
-            if parent.file_name() == Some("bin") {
-                let parent2 = parent.parent();
-                if let Some(parent2) = parent2 {
-                    if parent2.join("nixsa.toml").exists() {
-                        return Some((parent2.to_owned(), name.to_owned()));
-                    }
+fn find_nixsa_root(path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+    let mut path = path;
+    loop {
+        match path.parent() {
+            None => return Ok(None),
+            Some(p) => {
+                path = p;
+                if path.join("nixsa.toml").try_exists()? {
+                    return Ok(Some(path.into()));
                 }
             }
         }
     }
-    None
 }
 
-// Resolve symlinks until a path which is in NIXSA/bin is found, return NIXSA and the symlink name
-fn find_root_and_name(path: &Utf8Path) -> Result<(Utf8PathBuf, String)> {
-    let mut path = absolute_utf8(path)?;
-    if !path.exists() {
-        bail!("{} doesn't refer to a valid file", path);
-    }
-    loop {
-        if let Some((nixsa_root, name)) = get_nixsa_root_and_name_if_in_bin(&path) {
-            return Ok((nixsa_root, name));
-        }
-        if path.is_symlink() {
-            path = path.parent().expect("Expecting a parent").join(path.read_link_utf8()?);
-        } else {
-            bail!("{} isn't inside a NIXSA/bin directory", path);
-        }
-    }
-}
 enum ParsedArgs {
     Help,
     Symlinks { basepath: Utf8PathBuf },
@@ -272,17 +255,19 @@ enum ParsedArgs {
 }
 
 fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
-    let argv0 = Utf8PathBuf::from(args[0].clone());
-    let root_and_name = find_root_and_name(&argv0);
-    match root_and_name {
-        Err(e) => {
+    let proc_self_exe: &Utf8Path = "/proc/self/exe".into();
+    let exe_realpath = proc_self_exe.read_link_utf8()?;
+    let root = find_nixsa_root(&exe_realpath)?;
+    let name = <&Utf8Path>::from(args[0].as_str()).file_name().context("Expecting argv[0] to have a final element")?;
+    match root {
+        None => {
             if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
                 Ok(ParsedArgs::Help)
             } else {
-                Err(e)
+                bail!("Couldn't find a directory containing {} which contains a `nixsa.toml` file.", proc_self_exe);
             }
         }
-        Ok((basepath, name)) => {
+        Some(basepath) => {
             let nixpath = basepath.join("nix");
             if !nixpath.is_dir() {
                 bail!("{:?} doesn't exist or is not a directory", nixpath);
@@ -292,7 +277,7 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
                 bail!("{:?} is not a symlink", profile_path);
             }
             if name != "nixsa" {
-                Ok(ParsedArgs::Run { basepath, cmd: name, args: args[1..].into(), verbose: false })
+                Ok(ParsedArgs::Run { basepath, cmd: name.into(), args: args[1..].into(), verbose: false })
             } else {
                 if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
                     return Ok(ParsedArgs::Help);
