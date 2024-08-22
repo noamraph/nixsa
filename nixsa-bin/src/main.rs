@@ -1,10 +1,9 @@
 use anyhow::{bail, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{absolute_utf8, Utf8Path, Utf8PathBuf};
 use libc::{signal, SIGINT, SIG_IGN};
 use shell_quote::{Bash, QuoteRefExt};
 use std::collections::HashSet;
 use std::os::unix::{fs::symlink, process::ExitStatusExt};
-use std::path::absolute;
 use std::process::{Command, ExitCode};
 use std::{env, fs};
 use tracing::{info, warn, Level};
@@ -251,7 +250,7 @@ fn get_nixsa_root_and_name_if_in_bin(path: &Utf8Path) -> Option<(Utf8PathBuf, St
 
 // Resolve symlinks until a path which is in NIXSA/bin is found, return NIXSA and the symlink name
 fn find_root_and_name(path: &Utf8Path) -> Result<(Utf8PathBuf, String)> {
-    let mut path = Utf8PathBuf::from_path_buf(absolute(path)?).expect("Expecting only UTF-8 paths");
+    let mut path = absolute_utf8(path)?;
     if !path.exists() {
         bail!("{} doesn't refer to a valid file", path);
     }

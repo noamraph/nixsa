@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-camino = "1.1.7"
+camino = "1.1.9"
 libc = "0.2.158"
 shell-quote = { version = "0.7.1", default-features = false, features = [
     "bash",
