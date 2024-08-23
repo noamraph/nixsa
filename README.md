@@ -57,3 +57,12 @@ This command:
 In addition, after the command finishes, the `nixsa` executable looks at the current Nix profile, and updates the symlinks in the `nixsa-dir/bin` folder accordingly. For example, after running `nixsa-dir/bin/nix install nixpkgs#ponysay`, the symlink `nixsa-dir/bin/ponysay` will be created, linking to `nixsa-dir/bin/nixsa`.
 
 In order to allow upgrades of the `nixsa` executable itself, `nixsa-dir/bin/nixsa` is a symlink to `../nix/store/HASH-nixsa-bin-VERSION/bin/nixsa`. If you update the `nixsa-bin` package in the profile, Nixsa will update the `nixsa-dir/bin/nixsa` symlink accordingly.
+
+## Comparison to other tools
+
+Nixsa is very similar in its purpose to [nix-portable](https://github.com/DavHau/nix-portable). The main differences that I see are:
+* nix-portable doesn't support managing Nix profiles via `nix-env` or `nix-profile`, and doesn't support managing Nix channels via `nix-channel`. Nixsa does support those.
+* nix-portable stores state and configuration in per-user directories, such as `~/.nix-portable`. Nixsa keeps all state and configuration in the extracted directory, so you can have multiple Nixsa environments at once.
+* Nixsa uses Bubblewrap to virtualize the `/nix` directory. nix-portable has multiple available runtimes to do this, Bubblewrap being one of them. It is probably possible to add more runtimes alternatives to Nixsa, if the need arises.
+
+Another tool which allows using Nix without root is [nix-user-chroot](https://github.com/nix-community/nix-user-chroot). It is a lower-level tool, which just runs a subprocess in an environment in which `/nix` is binded to another directory. So, in order to run a command installed by Nix, you either have to enter a shell by running `nix-user-chroot ~/.nix bash -l`, or create a script which calls `nix-user-chroot` in order to run the command.
