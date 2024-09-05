@@ -4,10 +4,10 @@ Nixsa lets you use Nix without any installation. Just extract the tarball and yo
 
 ```bash
 # Download the Nixsa tarball
-wget https://github.com/noamraph/nixsa/releases/download/v0.1.2/nixsa-0.1.2-x86_64-linux.tar.xz
+wget https://github.com/noamraph/nixsa/releases/download/v0.1.3/nixsa-0.1.3-x86_64-linux.tar.xz
 
 # Extract
-tar -xf nixsa-0.1.2-x86_64-linux.tar.xz
+tar -xf nixsa-0.1.3-x86_64-linux.tar.xz
 
 # Install a package
 nixsa/bin/nix profile install nixpkgs#ponysay
