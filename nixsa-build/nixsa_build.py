@@ -54,9 +54,9 @@ def bwrap(outdir: Path, args: list[str | Path], input: bytes | None = None) -> N
 
 def nixsa_build(closure_info: Path, outdir: Path) -> None:
     store_paths = closure_info.joinpath('store-paths').read_text().split()
-    (nix_inst,) = [path for path in store_paths if '-nix-' in path]
-    (cacert_inst,) = [path for path in store_paths if '-cacert-' in path]
-    (nixsa_inst,) = [path for path in store_paths if '-nixsa-bin-' in path]
+    (nix_inst,) = [path for path in store_paths if path.split('-', 1)[1].startswith('nix-')]
+    (cacert_inst,) = [path for path in store_paths if path.split('-', 1)[1].startswith('nss-cacert-')]
+    (nixsa_inst,) = [path for path in store_paths if path.split('-', 1)[1].startswith('nixsa-bin-')]
     reginfo = closure_info.joinpath('registration').read_bytes()
 
     if outdir.exists():
