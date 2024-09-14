@@ -1,6 +1,6 @@
 [package]
 name = "nixsa"
-version = "0.1.3"
+version = "0.1.3-nix-20240911-38bfbb2"
 edition = "2021"
 
 [dependencies]
