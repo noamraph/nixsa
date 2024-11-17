@@ -16,8 +16,6 @@ nixsa/bin/nix profile install nixpkgs#ponysay
 nixsa/bin/ponysay 'Hi Nixsa!'
 ```
 
-Note: Nixsa currently uses a patched version of Nix, which supports environment variables like NIX_STATE_HOME. The [pull request](https://github.com/NixOS/nix/pull/11351) was merged, so hopefully when the next major Nix version is released, Nixsa will ship with the standard Nix version.
-
 [![asciicast](https://github.com/user-attachments/assets/f8e1919f-0f63-4ef1-8a54-57b385b1b6de)](https://asciinema.org/a/672748)
 
 One more feature: run `nixsa/bin/nixsa` to start a shell where `/nix` is binded to `nixsa/nix`, and where all the commands in the Nix profile (in `nixsa/state/profile`) are in the PATH.
