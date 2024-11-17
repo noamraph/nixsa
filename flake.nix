@@ -17,8 +17,7 @@
     };
 
     nix = {
-      url = "github:noamraph/nix/add-nix-state-home-2.24.4";
-      # url = "https://flakehub.com/f/DeterminateSystems/nix/=2.23.3.tar.gz";
+      url = "github:NixOs/nix/2.25.2";
     };
   };
 
