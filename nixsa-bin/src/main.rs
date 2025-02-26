@@ -60,6 +60,9 @@ fn get_bwrap_prefix(nixpath: &Utf8Path) -> Result<Vec<String>> {
             args.extend(["--bind".into(), root_dir.to_string(), root_dir.to_string()]);
         }
     }
+    if let Ok(val) = std::env::var("NIXSA_BWRAP_ARGS") {
+        args.extend(val.split_whitespace().map(String::from));
+    }
     Ok(args)
 }
 
