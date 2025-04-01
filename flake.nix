@@ -17,7 +17,7 @@
     };
 
     nix = {
-      url = "github:NixOs/nix/2.25.2";
+      url = "github:NixOs/nix/2.27.0";
     };
   };
 
