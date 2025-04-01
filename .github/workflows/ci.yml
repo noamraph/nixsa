@@ -13,8 +13,8 @@ jobs:
   build-x86_64-linux:
     uses: ./.github/workflows/build-x86_64-linux.yml
 
-  # build-aarch64-linux:
-  #   uses: ./.github/workflows/build-aarch64-linux.yml
+  build-aarch64-linux:
+    uses: ./.github/workflows/build-aarch64-linux.yml
 
   lints:
     name: Lints
@@ -49,7 +49,7 @@ jobs:
 
   run-x86_64-linux:
     name: Run x86_64 Linux
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [lints, build-x86_64-linux]
     permissions:
       id-token: "write"
@@ -71,21 +71,26 @@ jobs:
       - name: Check tarball
         run: nixsa-build/check_tarball.py nixsa-*.tar.xz
 
-
-  # run-aarch64-linux:
-  #   name: Run aarch64 Linux
-  #   runs-on: namespace-profile-default-arm64
-  #   needs: [lints, build-aarch64-linux]
-  #   permissions:
-  #     id-token: "write"
-  #     contents: "read"
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Restore Github cache artifacts
-  #       uses: actions/cache/restore@v4
-  #       with:
-  #         path: nixsa-*.tar.xz
-  #         key: aarch64-linux-artifacts-${{ github.sha }}
-  #     - name: Check tarball
-  #       run: nixsa-build/check_tarball.py nixsa-*.tar.xz
-  
+  run-aarch64-linux:
+    name: Run aarch64 Linux
+    runs-on: ubuntu-24.04-arm
+    needs: [lints, build-aarch64-linux]
+    permissions:
+      id-token: "write"
+      contents: "read"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Github cache artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: nixsa-*.tar.xz
+          key: aarch64-linux-artifacts-${{ github.sha }}
+      - name: Install bubblewrap
+        run: |
+          # Install bubblewrap, and make it work.
+          # See https://github.com/DevToys-app/DevToys/issues/1373#issuecomment-2599820594
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Check tarball
+        run: nixsa-build/check_tarball.py nixsa-*.tar.xz

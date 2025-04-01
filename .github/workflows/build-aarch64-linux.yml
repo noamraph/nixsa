@@ -11,7 +11,7 @@ on:
 jobs:
   build-aarch64-linux:
     name: Build aarch64 Linux
-    runs-on: namespace-profile-default-arm64
+    runs-on: ubuntu-24.04-arm
     concurrency: ${{ inputs.cache-key }}
     permissions:
       id-token: "write"
@@ -27,6 +27,12 @@ jobs:
           use-gha-cache: false
       - name: Build the tarball
         run: |
+          # Install bubblewrap, and make it work.
+          # See https://github.com/DevToys-app/DevToys/issues/1373#issuecomment-2599820594
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
           nix build .#packages.aarch64-linux.nixsa-tarball -L
           cp result/nixsa-*.tar.xz .
       - name: Create GitHub cache from build artifacts

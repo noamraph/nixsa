@@ -11,7 +11,7 @@ on:
 jobs:
   build-x86_64-linux:
     name: Build x86_64 Linux
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     concurrency: ${{ inputs.cache-key }}
     permissions:
       id-token: "write"
@@ -25,8 +25,6 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-gha-cache: false
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
       - name: Build the tarball
         run: |
           # Install bubblewrap, and make it work.
