@@ -17,4 +17,3 @@ wheels/
 *.tar.xz
 /nixsa
 check-tarball-*
-
