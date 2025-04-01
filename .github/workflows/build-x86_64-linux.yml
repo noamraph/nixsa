@@ -25,8 +25,16 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-gha-cache: false
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
       - name: Build the tarball
         run: |
+          # Install bubblewrap, and make it work.
+          # See https://github.com/DevToys-app/DevToys/issues/1373#issuecomment-2599820594
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
           nix build .#packages.x86_64-linux.nixsa-tarball -L
           cp result/nixsa-*.tar.xz .
       - name: Create GitHub cache from build artifacts

@@ -62,7 +62,12 @@ jobs:
           path: nixsa-*.tar.xz
           key: x86_64-linux-artifacts-${{ github.sha }}
       - name: Install bubblewrap
-        run: sudo apt-get -y install bubblewrap
+        run: |
+          # Install bubblewrap, and make it work.
+          # See https://github.com/DevToys-app/DevToys/issues/1373#issuecomment-2599820594
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Check tarball
         run: nixsa-build/check_tarball.py nixsa-*.tar.xz
 
