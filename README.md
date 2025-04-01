@@ -56,6 +56,11 @@ In addition, after the command finishes, the `nixsa` executable looks at the cur
 
 In order to allow upgrades of the `nixsa` executable itself, `nixsa-dir/bin/nixsa` is a symlink to `../nix/store/HASH-nixsa-bin-VERSION/bin/nixsa`. If you update the `nixsa-bin` package in the profile, Nixsa will update the `nixsa-dir/bin/nixsa` symlink accordingly.
 
+## Environment variables
+
+Nixsa supports the following environment variables to fine tune its behavior.
+- `NIXSA_BWRAP_ARGS` extra arguments appended to the computed `bwrap` command line.
+
 ## Comparison to other tools
 
 Nixsa is very similar in its purpose to [nix-portable](https://github.com/DavHau/nix-portable). The main differences that I see are:
