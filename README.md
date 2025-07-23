@@ -56,6 +56,10 @@ In addition, after the command finishes, the `nixsa` executable looks at the cur
 
 In order to allow upgrades of the `nixsa` executable itself, `nixsa-dir/bin/nixsa` is a symlink to `../nix/store/HASH-nixsa-bin-VERSION/bin/nixsa`. If you update the `nixsa-bin` package in the profile, Nixsa will update the `nixsa-dir/bin/nixsa` symlink accordingly.
 
+### Notice for Network-Attached Filesystem users
+
+`nixsa` uses lots of small files which means many network-attached filesystem solutions will be very slow due to metadata overheads. If this is the case, (e.g. on HPC cluster setups) see if you can extract and keep nixsa on a direct local storage folder, for example `/tmp`. Reinstalling to a temporary local disk directory is can be faster than copying many small files between storage devices.
+
 ## Environment variables
 
 Nixsa supports the following environment variables to fine tune its behavior.
