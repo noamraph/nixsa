@@ -1,9 +1,10 @@
 use anyhow::{bail, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
 use libc::{signal, SIGINT, SIG_IGN};
 use shell_quote::{Bash, QuoteRefExt};
 use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::os::unix::{fs::symlink, process::ExitStatusExt};
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::{env, fs};
 use tracing::{info, warn, Level};
@@ -50,33 +51,33 @@ fn verify_bwrap() -> Result<()> {
     Ok(())
 }
 
-fn get_bwrap_prefix(nixpath: &Utf8Path) -> Result<Vec<String>> {
-    let mut args: Vec<String> = vec!["bwrap".into(), "--bind".into(), nixpath.to_string(), "/nix".into()];
+fn get_bwrap_prefix(nixpath: &Path) -> Result<Vec<OsString>> {
+    let mut args: Vec<OsString> = vec!["bwrap".into(), "--bind".into(), nixpath.into(), "/nix".into()];
     args.extend(["--proc".into(), "/proc".into(), "--dev".into(), "/dev".into()]);
-    for root_dir in Utf8PathBuf::from("/").read_dir_utf8()?.flatten() {
+    for root_dir in PathBuf::from("/").read_dir()?.flatten() {
         let root_dir = root_dir.path();
         let file_name = root_dir.file_name().unwrap_or_default();
         if file_name != "dev" && file_name != "proc" && file_name != "nix" && root_dir.exists() {
-            args.extend(["--bind".into(), root_dir.to_string(), root_dir.to_string()]);
+            args.extend(["--bind".into(), root_dir.clone().into(), root_dir.into()]);
         }
     }
     if let Ok(val) = std::env::var("NIXSA_BWRAP_ARGS") {
-        args.extend(val.split_whitespace().map(String::from));
+        args.extend(val.split_whitespace().map(OsString::from));
     }
     Ok(args)
 }
 
 /// Get the real path to the 'bin' dir in the active profile, resolving `/nix` symlinks
-fn get_real_profile_bin_dir(basepath: &Utf8Path) -> Result<Utf8PathBuf> {
+fn get_real_profile_bin_dir(basepath: &Path) -> Result<PathBuf> {
     let profiles_dir = basepath.join("state/profiles");
-    let cur_profile_base = profiles_dir.join("profile").read_link_utf8()?;
+    let cur_profile_base = profiles_dir.join("profile").read_link()?;
     let cur_profile = profiles_dir.join(cur_profile_base);
-    let cur_profile_nix = cur_profile.read_link_utf8()?;
+    let cur_profile_nix = cur_profile.read_link()?;
     let cur_profile_nix_stripped = cur_profile_nix.strip_prefix("/nix/")?;
     let cur_profile_real = basepath.join("nix").join(cur_profile_nix_stripped);
     let cur_profile_bin = cur_profile_real.join("bin");
     let cur_profile_bin_real = if cur_profile_bin.is_symlink() {
-        let cur_profile_bin_nix = cur_profile_bin.read_link_utf8()?;
+        let cur_profile_bin_nix = cur_profile_bin.read_link()?;
         let cur_profile_bin_nix_stripped = cur_profile_bin_nix.strip_prefix("/nix/")?;
         basepath.join("nix").join(cur_profile_bin_nix_stripped)
     } else {
@@ -88,15 +89,15 @@ fn get_real_profile_bin_dir(basepath: &Utf8Path) -> Result<Utf8PathBuf> {
     Ok(cur_profile_bin_real)
 }
 
-fn read_profile_bin_dir(profile_bin_dir: &Utf8Path) -> Result<(HashSet<String>, Utf8PathBuf)> {
-    let mut src_names = HashSet::<String>::new();
-    let mut nixsa_link = Option::<Utf8PathBuf>::None;
-    for entry in profile_bin_dir.read_dir_utf8()? {
-        let name: String = entry?.file_name().into();
+fn read_profile_bin_dir(profile_bin_dir: &Path) -> Result<(HashSet<OsString>, PathBuf)> {
+    let mut src_names = HashSet::<OsString>::new();
+    let mut nixsa_link = Option::<PathBuf>::None;
+    for entry in profile_bin_dir.read_dir()? {
+        let name: OsString = entry?.file_name();
         if name == "nixsa" {
-            let link = profile_bin_dir.join("nixsa").read_link_utf8()?;
-            if !link.as_str().starts_with("/nix/store/") {
-                bail!("Expecting `nixsa` symlink in profile dir to start with `/nix/store`, is {}", link);
+            let link = profile_bin_dir.join("nixsa").read_link()?;
+            if !link.starts_with("/nix/store/") {
+                bail!("Expecting `nixsa` symlink in profile dir to start with `/nix/store`, is {:?}", link);
             }
             nixsa_link = Some(link);
         } else {
@@ -112,31 +113,31 @@ fn read_profile_bin_dir(profile_bin_dir: &Utf8Path) -> Result<(HashSet<String>, 
     Ok((src_names, nixsa_link))
 }
 
-fn read_nixsa_bin_dir(nixsa_bin_dir: &Utf8Path) -> Result<(HashSet<String>, Option<Utf8PathBuf>)> {
-    let mut dst_names = HashSet::<String>::new();
-    let mut cur_nixsa_link = Option::<Utf8PathBuf>::None;
-    for entry in nixsa_bin_dir.read_dir_utf8()? {
+fn read_nixsa_bin_dir(nixsa_bin_dir: &Path) -> Result<(HashSet<OsString>, Option<PathBuf>)> {
+    let mut dst_names = HashSet::<OsString>::new();
+    let mut cur_nixsa_link = Option::<PathBuf>::None;
+    for entry in nixsa_bin_dir.read_dir()? {
         let entry = entry?;
         let path = entry.path();
         let name = entry.file_name();
         if !path.is_symlink() {
             bail!("Expecting all items in bin dir to be symlinks, {:?} is not a symlink", path);
         }
-        let link = path.read_link_utf8()?;
+        let link = path.read_link()?;
         if name == "nixsa" {
             cur_nixsa_link = Some(link);
         } else {
-            if link != "nixsa" {
+            if link != OsStr::new("nixsa") {
                 bail!("Expecting all items in bin dir to be symlinks to 'nixsa', {:?} is not", path);
             }
-            dst_names.insert(name.into());
+            dst_names.insert(name);
         }
     }
     Ok((dst_names, cur_nixsa_link))
 }
 
 /// Update the symlinks in the nixsa/bin directory based on the profile bin directory
-fn update_bin_dir(basepath: &Utf8Path, ignore_mtime: bool) -> Result<()> {
+fn update_bin_dir(basepath: &Path, ignore_mtime: bool) -> Result<()> {
     let profiles_dir = basepath.join("state/profiles");
     let profiles_mtime = profiles_dir.metadata()?.modified()?;
     let nixsa_bin_dir = basepath.join("bin");
@@ -152,9 +153,9 @@ fn update_bin_dir(basepath: &Utf8Path, ignore_mtime: bool) -> Result<()> {
     let (src_names, nixsa_link) = read_profile_bin_dir(&profile_bin_dir)?;
     let (dst_names, cur_nixsa_link) = read_nixsa_bin_dir(&nixsa_bin_dir)?;
 
-    let nixsa_rel_link = Utf8PathBuf::from("../").join(&nixsa_link.as_str()[1..]);
+    let nixsa_rel_link = PathBuf::from("../").join(nixsa_link.strip_prefix("/")?);
     if !nixsa_bin_dir.join(&nixsa_rel_link).exists() {
-        bail!("nixsa link in profile doesn't exist: {}", nixsa_bin_dir.join(&nixsa_rel_link));
+        bail!("nixsa link in profile doesn't exist: {:?}", nixsa_bin_dir.join(&nixsa_rel_link));
     }
 
     let cur_nixsa_link_uptodate = cur_nixsa_link.as_ref().is_some_and(|link| *link == nixsa_rel_link);
@@ -185,7 +186,7 @@ fn update_bin_dir(basepath: &Utf8Path, ignore_mtime: bool) -> Result<()> {
     Ok(())
 }
 
-fn quote(s: &str) -> String {
+fn quote(s: &OsStr) -> String {
     s.quoted(Bash)
 }
 
@@ -195,18 +196,18 @@ fn ignore_sigint() {
     }
 }
 
-fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
+fn nixsa(basepath: &Path, cmd: &OsStr, args: &[OsString]) -> Result<ExitCode> {
     verify_bwrap()?;
     ignore_sigint();
 
     let nixpath = basepath.join("nix");
     let bwrap_prefix = get_bwrap_prefix(&nixpath)?;
     let nix_sh = basepath.join("state/profile/etc/profile.d/nix.sh");
-    let bash_c = format!("source {} && exec {} \"$@\"", quote(nix_sh.as_str()), quote(cmd));
+    let bash_c = format!("source {} && exec {} \"$@\"", quote(nix_sh.as_os_str()), quote(OsStr::new(cmd)));
 
     let mut args1 = bwrap_prefix;
-    args1.extend(["bash".into(), "-c".into(), bash_c, "--".into()]);
-    args1.extend(args.iter().map(String::clone));
+    args1.extend(["bash".into(), "-c".into(), OsString::from(bash_c), "--".into()]);
+    args1.extend(args.iter().map(OsString::clone));
 
     let extra_env = [
         ("NIX_USER_CONF_FILES", basepath.join("config/nix.conf")),
@@ -218,7 +219,7 @@ fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
 
     info!(
         "{} {}",
-        extra_env.iter().map(|(name, val)| format!("{}={}", name, val)).collect::<Vec<String>>().join(" "),
+        extra_env.iter().map(|(name, val)| format!("{}={:?}", name, val)).collect::<Vec<String>>().join(" "),
         args1.iter().map(|s| quote(s)).collect::<Vec<String>>().join(" ")
     );
 
@@ -236,7 +237,7 @@ fn nixsa(basepath: &Utf8Path, cmd: &str, args: &[String]) -> Result<ExitCode> {
     Ok(ExitCode::from(code))
 }
 
-fn find_nixsa_root(path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+fn find_nixsa_root(path: &Path) -> Result<Option<PathBuf>> {
     let mut path = path;
     loop {
         match path.parent() {
@@ -253,21 +254,21 @@ fn find_nixsa_root(path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
 
 enum ParsedArgs {
     Help,
-    Symlinks { basepath: Utf8PathBuf },
-    Run { basepath: Utf8PathBuf, cmd: String, args: Vec<String>, verbose: bool },
+    Symlinks { basepath: PathBuf },
+    Run { basepath: PathBuf, cmd: OsString, args: Vec<OsString>, verbose: bool },
 }
 
-fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
-    let proc_self_exe: &Utf8Path = "/proc/self/exe".into();
-    let exe_realpath = proc_self_exe.read_link_utf8()?;
+fn parse_args(args: Vec<OsString>) -> Result<ParsedArgs> {
+    let proc_self_exe: &Path = Path::new("/proc/self/exe");
+    let exe_realpath = proc_self_exe.read_link()?;
     let root = find_nixsa_root(&exe_realpath)?;
-    let name = <&Utf8Path>::from(args[0].as_str()).file_name().context("Expecting argv[0] to have a final element")?;
+    let name = Path::new(&args[0]).file_name().context("Expecting argv[0] to have a final element")?;
     match root {
         None => {
             if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
                 Ok(ParsedArgs::Help)
             } else {
-                bail!("Couldn't find a directory containing {} which contains a `nixsa.toml` file.", proc_self_exe);
+                bail!("Couldn't find a directory containing {:?} which contains a `nixsa.toml` file.", proc_self_exe);
             }
         }
         Some(basepath) => {
@@ -300,7 +301,10 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
                 }
 
                 if args.len() == 1 {
-                    args.push(env::var("SHELL")?);
+                    match env::var_os("SHELL") {
+                        None => bail!("Expecting SHELL to be available in the environment"),
+                        Some(val) => args.push(val),
+                    };
                 }
 
                 Ok(ParsedArgs::Run { basepath, cmd: args[1].clone(), args: args[2..].into(), verbose })
@@ -310,7 +314,7 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs> {
 }
 
 fn main() -> Result<ExitCode> {
-    let args0: Vec<String> = env::args().collect();
+    let args0: Vec<OsString> = env::args_os().collect();
     let args = parse_args(args0)?;
     match args {
         ParsedArgs::Help => {
