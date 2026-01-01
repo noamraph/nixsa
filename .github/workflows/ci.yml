@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Restore Github cache artifacts
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: nixsa-*.tar.xz
           key: x86_64-linux-artifacts-${{ github.sha }}
@@ -82,7 +82,7 @@ jobs:
   #   steps:
   #     - uses: actions/checkout@v4
   #     - name: Restore Github cache artifacts
-  #       uses: actions/cache/restore@v4
+  #       uses: actions/cache/restore@v5
   #       with:
   #         path: nixsa-*.tar.xz
   #         key: aarch64-linux-artifacts-${{ github.sha }}
